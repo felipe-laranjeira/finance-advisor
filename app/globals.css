@@ -1,0 +1,39 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  --font-sans: var(--font-sans);
+  --font-headline: var(--font-headline);
+
+  --color-primary: #003178;
+  --color-primary-container: #0d47a1;
+  --color-secondary: #006b5f;
+  --color-secondary-container: #8df5e4;
+  --color-tertiary: #68151b;
+  --color-tertiary-container: #872c2f;
+  --color-on-primary: #ffffff;
+  --color-on-secondary: #ffffff;
+  --color-on-tertiary: #ffffff;
+  --color-surface: #f7f9fc;
+  --color-surface-container-low: #f2f4f7;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-high: #e6e8eb;
+  --color-surface-container-highest: #e0e3e6;
+  --color-on-surface: #191c1e;
+  --color-on-surface-variant: #434652;
+  --color-outline-variant: #c3c6d4;
+}
+
+@layer base {
+  body {
+    @apply font-sans;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-headline;
+  }
+}
+
+.glass {
+  background: rgba(255, 255, 255, 0.8);
+  backdrop-filter: blur(24px);
+}
