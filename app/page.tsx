@@ -1,322 +1,180 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Sidebar } from '@/components/Sidebar';
-import { TopBar } from '@/components/TopBar';
-import { Stats } from '@/components/Stats';
-import { TransactionTable } from '@/components/TransactionTable';
-import { InsightCard } from '@/components/InsightCard';
-import { TransactionModal } from '@/components/TransactionModal';
-import { Filter, Download, Calendar, Tag } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { Mail, Lock } from 'lucide-react';
+import { motion } from 'motion/react';
 
-interface Transaction {
-  id: string;
-  date: Date;
-  description: string;
-  subtext: string;
-  category: string;
-  status: string;
-  amount: number;
-}
+export default function LoginPage() {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
-export default function Page() {
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [categories, setCategories] = useState<string[]>([]);
-  const [availableMonths, setAvailableMonths] = useState<string[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>('Todas as Categorias');
-  const [selectedMonthYear, setSelectedMonthYear] = useState<string>('Todos');
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.push('/despesas');
+      } else {
+        setAuthLoading(false);
+      }
+    };
+    checkUser();
+  }, [router]);
 
-  const fetchAvailableMonths = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('transactions')
-      .select('date')
-      .order('date', { ascending: false });
-
-    if (error) {
-      console.error('Error fetching months:', error);
-      return;
-    }
-
-    if (data) {
-      const months = new Set<string>();
-      const monthNames = [
-        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-      ];
-
-      data.forEach((t: any) => {
-        const date = new Date(t.date);
-        // Use UTC to avoid timezone shifts for dates stored as YYYY-MM-DD
-        const monthYear = `${monthNames[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
-        months.add(monthYear);
-      });
-
-      setAvailableMonths(Array.from(months));
-    }
-  }, []);
-
-  const fetchTransactions = useCallback(async () => {
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     setLoading(true);
-    
-    let selectString = `
-      *,
-      categories (
-        name
-      )
-    `;
+    setError(null);
 
-    if (selectedCategory !== 'Todas as Categorias') {
-      selectString = `
-        *,
-        categories!inner (
-          name
-        )
-      `;
-    }
-
-    let query = supabase
-      .from('transactions')
-      .select(selectString);
-
-    if (selectedCategory !== 'Todas as Categorias') {
-      query = query.eq('categories.name', selectedCategory);
-    }
-
-    if (selectedMonthYear !== 'Todos') {
-      const [monthName, year] = selectedMonthYear.split(' ');
-      const monthMap: { [key: string]: number } = {
-        'Janeiro': 0, 'Fevereiro': 1, 'Março': 2, 'Abril': 3, 'Maio': 4, 'Junho': 5,
-        'Julho': 6, 'Agosto': 7, 'Setembro': 8, 'Outubro': 9, 'Novembro': 10, 'Dezembro': 11
-      };
-      const month = monthMap[monthName];
-      if (month !== undefined) {
-        const startDate = new Date(parseInt(year), month, 1);
-        const endDate = new Date(parseInt(year), month + 1, 0);
-        query = query.gte('date', startDate.toISOString().split('T')[0])
-                     .lte('date', endDate.toISOString().split('T')[0]);
-      }
-    }
-
-    const { data, error } = await query.order('date', { ascending: false });
+    const { error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
     if (error) {
-      console.error('Error fetching transactions:', error);
+      setError(error.message === 'Invalid login credentials' ? 'Credenciais inválidas. Verifique seu e-mail e senha.' : error.message);
+      setLoading(false);
     } else {
-      const formatted = data.map((t: any) => ({
-        id: t.id,
-        date: new Date(t.date),
-        description: t.description,
-        subtext: '', // Status and subtext were removed from UI but kept in interface for now
-        category: t.categories?.name || 'Outros',
-        status: 'Pago',
-        amount: parseFloat(t.amount),
-      }));
-      setTransactions(formatted);
-    }
-    setLoading(false);
-  }, [selectedCategory, selectedMonthYear]);
-
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      const { data: catData, error: catError } = await supabase
-        .from('categories')
-        .select('name')
-        .order('name');
-      
-      if (mounted) {
-        if (catError) {
-          console.error('Error fetching categories:', catError);
-        } else if (catData) {
-          setCategories(catData.map(c => c.name));
-        }
-        await fetchAvailableMonths();
-      }
-    };
-    load();
-    return () => { mounted = false; };
-  }, [fetchAvailableMonths]);
-
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      if (mounted) {
-        await fetchTransactions();
-      }
-    };
-    load();
-    return () => { mounted = false; };
-  }, [selectedCategory, selectedMonthYear, fetchTransactions]);
-
-  // Expose modal open function to window for Sidebar access
-  useEffect(() => {
-    (window as any).openTransactionModal = () => {
-      setEditingTransaction(null);
-      setIsModalOpen(true);
-    };
-  }, []);
-
-  const totals = useMemo(() => {
-    const total = Math.abs(transactions.reduce((acc, t) => acc + t.amount, 0));
-    const fixed = Math.abs(transactions.filter(t => t.category === 'Aluguel').reduce((acc, t) => acc + t.amount, 0));
-    const variable = total - fixed;
-    return { total, fixed, variable };
-  }, [transactions]);
-
-  const handleSaveTransaction = async (data: any) => {
-    // Find category ID
-    const { data: catData } = await supabase
-      .from('categories')
-      .select('id')
-      .eq('name', data.category)
-      .single();
-
-    const payload = {
-      description: data.description,
-      amount: data.amount,
-      date: data.date.toISOString().split('T')[0],
-      category_id: catData?.id,
-    };
-
-    if (data.id) {
-      const { error } = await supabase
-        .from('transactions')
-        .update(payload)
-        .eq('id', data.id);
-      if (error) console.error('Error updating:', error);
-    } else {
-      const { error } = await supabase
-        .from('transactions')
-        .insert([payload]);
-      if (error) console.error('Error inserting:', error);
-    }
-    fetchAvailableMonths();
-    fetchTransactions();
-  };
-
-  const handleDeleteTransaction = async (id: string) => {
-    const { error } = await supabase
-      .from('transactions')
-      .delete()
-      .eq('id', id);
-    
-    if (error) {
-      console.error('Error deleting:', error);
-    } else {
-      setTransactions(prev => prev.filter(t => t.id !== id));
-      fetchAvailableMonths();
+      router.push('/despesas');
     }
   };
 
-  const handleEditTransaction = (transaction: Transaction) => {
-    setEditingTransaction(transaction);
-    setIsModalOpen(true);
-  };
-
-  const isSupabaseConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  if (authLoading) {
+    return <div className="min-h-screen bg-surface flex items-center justify-center">
+      <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+    </div>;
+  }
 
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      
-      <main className="flex-1 ml-64 bg-surface min-h-screen pb-20">
-        <TopBar />
-        
-        {!isSupabaseConfigured && (
-          <div className="mx-12 mt-8 p-4 bg-error-container text-on-error-container rounded-2xl border border-error/20 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-error/10 flex items-center justify-center shrink-0">
-              <Tag className="text-error" size={20} />
-            </div>
-            <div>
-              <p className="font-bold">Supabase não configurado</p>
-              <p className="text-sm opacity-80">Por favor, configure as variáveis de ambiente NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY nas configurações do projeto.</p>
-            </div>
+    <div className="bg-surface font-body text-on-surface min-h-screen flex flex-col">
+      {/* TopNavBar */}
+      <nav className="w-full top-0 left-0 bg-transparent z-50">
+        <div className="flex justify-between items-center max-w-7xl mx-auto px-8 py-6 w-full">
+          <div className="text-2xl font-bold tracking-tighter text-primary font-headline">
+            Assistente Financeiro
           </div>
-        )}
+        </div>
+      </nav>
 
-        <div className="p-12 max-w-7xl mx-auto">
-          {/* Hero Header */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-16">
-            <div>
-              <h2 className="text-5xl font-black text-on-surface font-headline tracking-tight mb-3">Despesas</h2>
-              <p className="text-on-surface-variant text-lg font-medium">Acompanhamento abrangente de suas saídas fiscais e compromissos.</p>
+      {/* Main Content: Split Layout */}
+      <main className="flex-grow flex items-center justify-center px-6 lg:px-0">
+        <div className="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-2 bg-surface-container-lowest rounded-3xl overflow-hidden shadow-2xl shadow-on-surface/5">
+          {/* Left Side: Visual/Branding (Desktop Only) */}
+          <div className="hidden lg:flex flex-col justify-between p-12 bg-gradient-to-br from-primary to-primary-container relative overflow-hidden">
+            <div className="absolute inset-0 opacity-20 pointer-events-none bg-[url('https://lh3.googleusercontent.com/aida-public/AB6AXuBS9xpwwtey6RbAy_90e0FWVbhr9aa015sP_9qU-AYOhgNrGQpxVTr68JUXpFMdalaeR3pP2j8JKuPdJ4dKhvXPjZGfv93TqSlhjwvLLeD3PFJGcD6cNVGxTSdsxs6AVkH2U63Z_Yf5vNCnyJTpdS3dGO-ua6U9lgw_Ur2LUH9aw1SkalNryIuoEpVGoc9XpaaK7rSAENOWxq9lrke2vFuB_LmwwUnvAxvsGyH6n_JyzdwQdovRGxZAh4i-mghGZOMjkPraQhI8E9zh')] bg-cover">
             </div>
-            
-            <div className="flex items-center gap-4">
-              <div className="flex bg-surface-container-high p-1.5 rounded-2xl shadow-inner">
-                <button className="px-6 py-2.5 rounded-xl bg-surface-container-lowest shadow-md text-sm font-bold text-primary transition-all">Vista em Tabela</button>
-                <button className="px-6 py-2.5 rounded-xl text-sm font-bold text-on-surface-variant hover:text-on-surface transition-all">Insights</button>
+            <div className="relative z-10">
+              <h2 className="text-4xl font-headline font-extrabold text-white tracking-tight leading-tight mb-4">
+                A arte da precisão <br/>em cada detalhe fiscal.
+              </h2>
+              <p className="text-primary-fixed/80 max-w-sm text-lg font-light">
+                Transforme sua gestão financeira com o Atelier de inteligência que esculpe sua prosperidade.
+              </p>
+            </div>
+            <div className="relative z-10 bg-white/10 backdrop-blur-xl p-6 rounded-2xl border border-white/10">
+              <div className="flex items-center gap-4 mb-3">
+                <div className="h-10 w-10 rounded-full bg-secondary-fixed flex items-center justify-center">
+                  <span className="material-symbols-outlined text-on-secondary-container">verified_user</span>
+                </div>
+                <div>
+                  <p className="text-white font-semibold text-sm">Segurança de Nível Bancário</p>
+                  <p className="text-white/60 text-xs text-wrap">Seus dados protegidos por criptografia de ponta a ponta.</p>
+                </div>
               </div>
-              <button className="px-8 py-3.5 rounded-2xl bg-surface-container-lowest text-on-surface font-bold flex items-center gap-2.5 border border-outline-variant/10 hover:bg-surface-container-low transition-all shadow-sm">
-                <Filter size={18} />
-                Filtros
-              </button>
             </div>
           </div>
 
-          <Stats 
-            total={totals.total} 
-            fixed={totals.fixed} 
-            variable={totals.variable} 
-          />
+          {/* Right Side: Login Form */}
+          <div className="p-8 md:p-16 flex flex-col justify-center">
+            <div className="max-w-md w-full mx-auto">
+              <div className="mb-10">
+                <h1 className="text-3xl font-headline font-extrabold text-on-surface mb-2">Bem-vindo ao Assistente Financeiro</h1>
+                <p className="text-on-surface-variant text-sm">Insira suas credenciais para acessar sua oficina financeira.</p>
+              </div>
+              
+              {error && (
+                <div className="mb-6 p-4 bg-error text-white rounded-xl text-sm shadow-lg shadow-error/20">
+                  {error}
+                </div>
+              )}
 
-          {/* Filters & Controls */}
-          <div className="flex flex-wrap items-center gap-5 mb-8 px-2">
-            <div className="flex items-center gap-3 px-6 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5">
-              <Calendar size={18} className="text-primary" />
-              <select 
-                value={selectedMonthYear}
-                onChange={(e) => setSelectedMonthYear(e.target.value)}
-                className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer"
-              >
-                <option value="Todos">Todos os Meses</option>
-                {availableMonths.map(month => (
-                  <option key={month} value={month}>{month}</option>
-                ))}
-              </select>
+              <form className="space-y-6" onSubmit={handleLogin}>
+                {/* Email Field */}
+                <div className="space-y-2">
+                  <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider" htmlFor="email">Email</label>
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-outline" size={20} />
+                    <input 
+                      className="w-full pl-12 pr-4 py-3.5 bg-surface-container-highest border-none rounded-xl focus:ring-2 focus:ring-primary/20 focus:bg-surface-container-lowest transition-all text-on-surface placeholder:text-outline/60" 
+                      id="email" 
+                      placeholder="nome@exemplo.com" 
+                      type="email"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                {/* Password Field */}
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <label className="text-xs font-semibold text-on-surface-variant uppercase tracking-wider" htmlFor="password">Senha</label>
+                    <a className="text-xs font-medium text-primary hover:underline decoration-primary/30" href="#">Esqueci minha senha</a>
+                  </div>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-outline" size={20} />
+                    <input 
+                      className="w-full pl-12 pr-4 py-3.5 bg-surface-container-highest border-none rounded-xl focus:ring-2 focus:ring-primary/20 focus:bg-surface-container-lowest transition-all text-on-surface placeholder:text-outline/60" 
+                      id="password" 
+                      placeholder="••••••••" 
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                {/* Remember Me */}
+                <div className="flex items-center">
+                  <input className="w-4 h-4 text-primary bg-surface-container-high border-none rounded focus:ring-primary/30" id="remember" type="checkbox"/>
+                  <label className="ml-2 text-sm text-on-surface-variant" htmlFor="remember">Lembrar de mim</label>
+                </div>
+                {/* Login Button */}
+                <button 
+                  className="w-full bg-gradient-to-br from-primary to-primary-container text-on-primary py-4 rounded-xl font-headline font-bold text-lg shadow-lg shadow-primary/20 hover:shadow-primary/40 active:scale-[0.98] transition-all disabled:opacity-50" 
+                  type="submit"
+                  disabled={loading}
+                >
+                  {loading ? 'Entrando...' : 'Entrar'}
+                </button>
+              </form>
             </div>
-            
-            <div className="flex items-center gap-3 px-6 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5">
-              <Tag size={18} className="text-primary" />
-              <select 
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer"
-              >
-                <option value="Todas as Categorias">Todas as Categorias</option>
-                {categories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
-            
-            <button className="ml-auto flex items-center gap-2.5 text-primary font-black text-sm hover:underline transition-all group">
-              <Download size={18} className="group-hover:translate-y-0.5 transition-transform" />
-              Exportar PDF
-            </button>
           </div>
-
-          <TransactionTable 
-            transactions={transactions} 
-            onDelete={handleDeleteTransaction}
-            onEdit={handleEditTransaction}
-          />
-
-          <InsightCard />
         </div>
       </main>
 
-      <TransactionModal 
-        key={isModalOpen ? (editingTransaction?.id || 'new') : 'closed'}
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        onSave={handleSaveTransaction}
-        editingTransaction={editingTransaction}
-      />
+      {/* Footer */}
+      <footer className="w-full bg-surface-container-low border-t border-outline-variant/20 mt-12">
+        <div className="flex flex-col md:flex-row justify-between items-center max-w-7xl mx-auto px-8 py-12 w-full gap-6">
+          <div className="text-lg font-bold text-primary font-headline">
+            Assistente Financeiro
+          </div>
+          <div className="flex flex-wrap justify-center gap-6">
+            <a className="text-xs font-normal tracking-wide text-on-surface-variant hover:underline decoration-primary/30 transition-opacity opacity-80 hover:opacity-100" href="#">Privacy Policy</a>
+            <a className="text-xs font-normal tracking-wide text-on-surface-variant hover:underline decoration-primary/30 transition-opacity opacity-80 hover:opacity-100" href="#">Terms of Service</a>
+            <a className="text-xs font-normal tracking-wide text-on-surface-variant hover:underline decoration-primary/30 transition-opacity opacity-80 hover:opacity-100" href="#">Cookie Settings</a>
+            <a className="text-xs font-normal tracking-wide text-on-surface-variant hover:underline decoration-primary/30 transition-opacity opacity-80 hover:opacity-100" href="#">Global Compliance</a>
+          </div>
+          <p className="text-xs font-normal tracking-wide text-on-surface-variant text-center md:text-right">
+            © 2024 Assistente Financeiro. All rights reserved. Precision in Prosperity.
+          </p>
+        </div>
+      </footer>
     </div>
   );
 }
