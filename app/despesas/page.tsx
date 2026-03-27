@@ -34,6 +34,7 @@ export default function Page() {
   const [selectedMonthYear, setSelectedMonthYear] = useState<string>('Todos');
   const [authLoading, setAuthLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
+  const [comparisonStats, setComparisonStats] = useState({ current: 0, previous: 0 });
   const router = useRouter();
 
   useEffect(() => {
@@ -80,6 +81,27 @@ export default function Page() {
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
     
+    // Fetch comparison stats separately (current vs previous month)
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    
+    const startOfCurrent = new Date(currentYear, currentMonth, 1).toISOString().split('T')[0];
+    const endOfCurrent = new Date(currentYear, currentMonth + 1, 0).toISOString().split('T')[0];
+    
+    const startOfPrevious = new Date(currentYear, currentMonth - 1, 1).toISOString().split('T')[0];
+    const endOfPrevious = new Date(currentYear, currentMonth, 0).toISOString().split('T')[0];
+
+    const [currentRes, previousRes] = await Promise.all([
+      supabase.from('transactions').select('amount').gte('date', startOfCurrent).lte('date', endOfCurrent),
+      supabase.from('transactions').select('amount').gte('date', startOfPrevious).lte('date', endOfPrevious)
+    ]);
+
+    const currentTotal = Math.abs(currentRes.data?.reduce((acc, t) => acc + parseFloat(t.amount), 0) || 0);
+    const previousTotal = Math.abs(previousRes.data?.reduce((acc, t) => acc + parseFloat(t.amount), 0) || 0);
+    
+    setComparisonStats({ current: currentTotal, previous: previousTotal });
+
     let selectString = `
       *,
       categories (
@@ -180,9 +202,7 @@ export default function Page() {
 
   const totals = useMemo(() => {
     const total = Math.abs(transactions.reduce((acc, t) => acc + t.amount, 0));
-    const fixed = Math.abs(transactions.filter(t => t.category === 'Aluguel').reduce((acc, t) => acc + t.amount, 0));
-    const variable = total - fixed;
-    return { total, fixed, variable };
+    return { total };
   }, [transactions]);
 
   const handleSaveTransaction = async (data: any) => {
@@ -391,8 +411,8 @@ export default function Page() {
 
           <Stats 
             total={totals.total} 
-            fixed={totals.fixed} 
-            variable={totals.variable} 
+            currentMonthTotal={comparisonStats.current}
+            previousMonthTotal={comparisonStats.previous}
           />
 
           {/* Filters & Controls */}
