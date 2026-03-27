@@ -7,9 +7,11 @@ import { Stats } from '@/components/Stats';
 import { TransactionTable } from '@/components/TransactionTable';
 import { InsightCard } from '@/components/InsightCard';
 import { TransactionModal } from '@/components/TransactionModal';
-import { Filter, Download, Calendar, Tag } from 'lucide-react';
+import { Filter, Download, Calendar, Tag, Upload, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
+import { GoogleGenAI, Type } from "@google/genai";
+import { cn } from '@/lib/utils';
 
 interface Transaction {
   id: string;
@@ -31,6 +33,7 @@ export default function Page() {
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas as Categorias');
   const [selectedMonthYear, setSelectedMonthYear] = useState<string>('Todos');
   const [authLoading, setAuthLoading] = useState(true);
+  const [isImporting, setIsImporting] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -232,6 +235,113 @@ export default function Page() {
     setIsModalOpen(true);
   };
 
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsImporting(true);
+    try {
+      const reader = new FileReader();
+      const fileData = await new Promise<string>((resolve) => {
+        reader.onload = () => {
+          const base64 = (reader.result as string).split(',')[1];
+          resolve(base64);
+        };
+        reader.readAsDataURL(file);
+      });
+
+      const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
+      
+      const currentCategories = categories.length > 0 ? categories : ['Alimentação', 'Transporte', 'Saúde', 'Educação', 'Lazer', 'Moradia', 'Outros'];
+      
+      const prompt = `
+        Analise este extrato bancário (imagem ou PDF) e identifique todos os lançamentos negativos (despesas/saídas).
+        Para cada despesa encontrada, extraia:
+        1. Data (no formato YYYY-MM-DD)
+        2. Descrição (nome do estabelecimento ou serviço)
+        3. Valor (número positivo representando a despesa)
+        4. Categoria (tente mapear para uma destas: ${currentCategories.join(', ')}. Se não tiver certeza, use "Outros").
+
+        IMPORTANTE: 
+        - Mapeie a categoria de forma inteligente. Por exemplo, "Uber", "99", "Posto", "Combustível" -> "Transporte"; "Restaurante", "iFood", "Mercado", "Supermercado", "Padaria" -> "Alimentação"; "Farmácia", "Hospital" -> "Saúde".
+        - Use apenas as categorias fornecidas na lista.
+
+        Retorne APENAS um array JSON válido, sem formatação markdown, seguindo este esquema:
+        [
+          { "date": "2024-03-26", "description": "Supermercado", "amount": 150.50, "category": "Alimentação" }
+        ]
+        Se não encontrar despesas, retorne um array vazio [].
+      `;
+
+      const response = await ai.models.generateContent({
+        model: "gemini-3-flash-preview",
+        contents: [
+          {
+            parts: [
+              { text: prompt },
+              {
+                inlineData: {
+                  mimeType: file.type,
+                  data: fileData
+                }
+              }
+            ]
+          }
+        ],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                date: { type: Type.STRING },
+                description: { type: Type.STRING },
+                amount: { type: Type.NUMBER },
+                category: { type: Type.STRING }
+              },
+              required: ["date", "description", "amount", "category"]
+            }
+          }
+        }
+      });
+
+      const extractedData = JSON.parse(response.text || "[]");
+      
+      if (extractedData.length > 0) {
+        // Get category IDs
+        const { data: catData } = await supabase.from('categories').select('id, name');
+        const categoryMap = new Map(catData?.map(c => [c.name.toLowerCase().trim(), c.id]));
+        const defaultCategoryId = categoryMap.get('outros');
+
+        const transactionsToInsert = extractedData.map((item: any) => {
+          const categoryName = item.category.toLowerCase().trim();
+          return {
+            description: item.description,
+            amount: -Math.abs(item.amount), // Ensure it's stored as a negative value as requested
+            date: item.date,
+            category_id: categoryMap.get(categoryName) || defaultCategoryId,
+          };
+        });
+
+        const { error } = await supabase.from('transactions').insert(transactionsToInsert);
+        if (error) throw error;
+
+        alert(`${extractedData.length} despesas importadas com sucesso!`);
+        fetchAvailableMonths();
+        fetchTransactions();
+      } else {
+        alert("Nenhuma despesa identificada no arquivo.");
+      }
+    } catch (error) {
+      console.error('Erro na importação:', error);
+      alert("Erro ao processar o arquivo. Verifique se é um extrato válido.");
+    } finally {
+      setIsImporting(false);
+      if (e.target) e.target.value = '';
+    }
+  };
+
   const isSupabaseConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (authLoading) {
@@ -315,10 +425,31 @@ export default function Page() {
               </select>
             </div>
             
-            <button className="ml-auto flex items-center gap-2.5 text-primary font-black text-sm hover:underline transition-all group">
-              <Download size={18} className="group-hover:translate-y-0.5 transition-transform" />
-              Exportar PDF
-            </button>
+            <div className="ml-auto flex items-center gap-4">
+              <label className={cn(
+                "flex items-center gap-2.5 text-primary font-black text-sm hover:underline cursor-pointer transition-all group",
+                isImporting && "opacity-50 cursor-not-allowed pointer-events-none"
+              )}>
+                {isImporting ? (
+                  <Loader2 size={18} className="animate-spin" />
+                ) : (
+                  <Upload size={18} className="group-hover:-translate-y-0.5 transition-transform" />
+                )}
+                {isImporting ? 'Processando...' : 'Importar Despesas'}
+                <input 
+                  type="file" 
+                  className="hidden" 
+                  accept="image/*,application/pdf"
+                  onChange={handleImportFile}
+                  disabled={isImporting}
+                />
+              </label>
+
+              <button className="flex items-center gap-2.5 text-primary font-black text-sm hover:underline transition-all group">
+                <Download size={18} className="group-hover:translate-y-0.5 transition-transform" />
+                Exportar PDF
+              </button>
+            </div>
           </div>
 
           <TransactionTable 
