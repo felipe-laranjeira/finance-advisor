@@ -15,15 +15,37 @@ export default function LoginPage() {
   const router = useRouter();
 
   useEffect(() => {
-    const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session) {
         router.push('/despesas');
       } else {
         setAuthLoading(false);
       }
+    });
+
+    const checkUser = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error) {
+          // If there's an error (like refresh token not found), clear session
+          await supabase.auth.signOut();
+          setAuthLoading(false);
+        } else if (session) {
+          router.push('/despesas');
+        } else {
+          setAuthLoading(false);
+        }
+      } catch (err) {
+        console.error('Auth check error:', err);
+        setAuthLoading(false);
+      }
     };
+    
     checkUser();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [router]);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -56,7 +78,7 @@ export default function LoginPage() {
       <nav className="w-full top-0 left-0 bg-transparent z-50">
         <div className="flex justify-between items-center max-w-7xl mx-auto px-8 py-6 w-full">
           <div className="text-2xl font-bold tracking-tighter text-primary font-headline">
-            Assistente Financeiro
+            Financial Advisor
           </div>
         </div>
       </nav>
@@ -93,8 +115,8 @@ export default function LoginPage() {
           <div className="p-8 md:p-16 flex flex-col justify-center">
             <div className="max-w-md w-full mx-auto">
               <div className="mb-10">
-                <h1 className="text-3xl font-headline font-extrabold text-on-surface mb-2">Bem-vindo ao Assistente Financeiro</h1>
-                <p className="text-on-surface-variant text-sm">Insira suas credenciais para acessar sua oficina financeira.</p>
+                <h1 className="text-3xl font-headline font-extrabold text-on-surface mb-2">Financial Advisor</h1>
+                <p className="text-on-surface-variant text-sm">O seu assistente financeiro</p>
               </div>
               
               {error && (
@@ -162,7 +184,7 @@ export default function LoginPage() {
       <footer className="w-full bg-surface-container-low border-t border-outline-variant/20 mt-12">
         <div className="flex flex-col md:flex-row justify-between items-center max-w-7xl mx-auto px-8 py-12 w-full gap-6">
           <div className="text-lg font-bold text-primary font-headline">
-            Assistente Financeiro
+            Financial Advisor
           </div>
           <div className="flex flex-wrap justify-center gap-6">
             <a className="text-xs font-normal tracking-wide text-on-surface-variant hover:underline decoration-primary/30 transition-opacity opacity-80 hover:opacity-100" href="#">Privacy Policy</a>
@@ -171,7 +193,7 @@ export default function LoginPage() {
             <a className="text-xs font-normal tracking-wide text-on-surface-variant hover:underline decoration-primary/30 transition-opacity opacity-80 hover:opacity-100" href="#">Global Compliance</a>
           </div>
           <p className="text-xs font-normal tracking-wide text-on-surface-variant text-center md:text-right">
-            © 2024 Assistente Financeiro. All rights reserved. Precision in Prosperity.
+            © 2024 Financial Advisor. All rights reserved. Precision in Prosperity.
           </p>
         </div>
       </footer>

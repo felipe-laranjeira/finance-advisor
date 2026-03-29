@@ -13,7 +13,7 @@ const manrope = Manrope({
 });
 
 export const metadata: Metadata = {
-  title: 'Assistente Financeiro | Gestão de Patrimônio Premium',
+  title: 'Financial Advisor | O seu assistente financeiro',
   description: 'Acompanhamento abrangente de suas saídas fiscais e compromissos.',
 };
 

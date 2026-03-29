@@ -38,9 +38,9 @@ export function Sidebar() {
       <div className="flex flex-col h-full py-8 px-4">
         {/* Brand Section */}
         <div className="mb-10 px-4">
-          <h1 className="font-black text-primary text-2xl tracking-tight">Assistente Financeiro</h1>
+          <h1 className="font-black text-primary text-2xl tracking-tight">Financial Advisor</h1>
           <p className="text-[10px] uppercase tracking-[0.2em] text-on-surface-variant font-bold mt-1">
-            Gestão de Patrimônio Premium
+            O seu assistente financeiro
           </p>
         </div>
 

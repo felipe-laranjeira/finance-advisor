@@ -7,11 +7,11 @@ import { Stats } from '@/components/Stats';
 import { TransactionTable } from '@/components/TransactionTable';
 import { InsightCard } from '@/components/InsightCard';
 import { TransactionModal } from '@/components/TransactionModal';
-import { Filter, Download, Calendar, Tag, Upload, Loader2 } from 'lucide-react';
+import { Filter, Download, Calendar, Tag, Upload, Loader2, Sparkles, Receipt } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { GoogleGenAI, Type } from "@google/genai";
-import { cn } from '@/lib/utils';
+import { cn, formatCurrency } from '@/lib/utils';
 
 interface Transaction {
   id: string;
@@ -35,18 +35,41 @@ export default function Page() {
   const [authLoading, setAuthLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [comparisonStats, setComparisonStats] = useState({ current: 0, previous: 0 });
+  const [activeTab, setActiveTab] = useState<'table' | 'insights'>('table');
+  const [subscriptionInsights, setSubscriptionInsights] = useState<any>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
-    const checkUser = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || !session) {
         router.push('/');
       } else {
         setAuthLoading(false);
       }
+    });
+
+    const checkUser = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
+        if (error || !session) {
+          // If there's an error (like refresh token not found), clear session and redirect
+          await supabase.auth.signOut();
+          router.push('/');
+        } else {
+          setAuthLoading(false);
+        }
+      } catch (err) {
+        console.error('Auth check error:', err);
+        router.push('/');
+      }
     };
+    
     checkUser();
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [router]);
 
   const fetchAvailableMonths = useCallback(async () => {
@@ -364,6 +387,75 @@ export default function Page() {
 
   const isSupabaseConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
+  const runSubscriptionAnalysis = async () => {
+    if (transactions.length === 0) return;
+    
+    setIsAnalyzing(true);
+    try {
+      const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY! });
+      const model = "gemini-3-flash-preview";
+      
+      const transactionData = transactions.map(t => ({
+        description: t.description,
+        amount: t.amount,
+        date: t.date.toISOString().split('T')[0],
+        category: t.category
+      }));
+
+      const prompt = `Você é um Analista de Finanças Pessoais especializado em identificar padrões de assinaturas (SaaS, Streaming, Clubes de Assinatura).
+
+Sua tarefa é analisar o extrato bancário fornecido e identificar cobranças que possuem características de recorrência.
+
+Critérios de identificação:
+1. Nomes comuns (ex: Netflix, Spotify, Amazon Prime, iCloud, Google One, Canva, Microsoft 365).
+2. Repetição de valores idênticos em meses diferentes.
+3. Termos como "Mensalidade", "Assinatura", "Anuidade", ou prefixos de gateways de pagamento (ex: "PAG*", "STRIPE*").
+
+Sua saída deve ser EXCLUSIVAMENTE um JSON estruturado seguindo este formato:
+
+{
+  "assinaturas_detectadas": [
+    {
+      "servico": "Nome provável do serviço",
+      "valor": 0.00,
+      "dia_cobrança": 15,
+      "confianca_recorrencia": "ALTA/MEDIA/BAIXA",
+      "alerta_zombie": true/false
+    }
+  ],
+  "potencial_economia_mensal": 0.00
+}
+
+Transações para analisar:
+${JSON.stringify(transactionData, null, 2)}`;
+
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+        config: {
+          responseMimeType: "application/json"
+        }
+      });
+
+      const text = response.text;
+      if (!text) {
+        throw new Error("Resposta da IA vazia");
+      }
+      const result = JSON.parse(text);
+      setSubscriptionInsights(result);
+    } catch (error) {
+      console.error('Erro na análise:', error);
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (activeTab === 'insights' && !subscriptionInsights && !isAnalyzing) {
+      runSubscriptionAnalysis();
+    }
+  }, [activeTab]);
+
   if (authLoading) {
     return <div className="min-h-screen bg-surface flex items-center justify-center">
       <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
@@ -399,8 +491,28 @@ export default function Page() {
             
             <div className="flex items-center gap-4">
               <div className="flex bg-surface-container-high p-1.5 rounded-2xl shadow-inner">
-                <button className="px-6 py-2.5 rounded-xl bg-surface-container-lowest shadow-md text-sm font-bold text-primary transition-all">Vista em Tabela</button>
-                <button className="px-6 py-2.5 rounded-xl text-sm font-bold text-on-surface-variant hover:text-on-surface transition-all">Insights</button>
+                <button 
+                  onClick={() => setActiveTab('table')}
+                  className={cn(
+                    "px-6 py-2.5 rounded-xl text-sm font-bold transition-all",
+                    activeTab === 'table' 
+                      ? "bg-surface-container-lowest shadow-md text-primary" 
+                      : "text-on-surface-variant hover:text-on-surface"
+                  )}
+                >
+                  Vista em Tabela
+                </button>
+                <button 
+                  onClick={() => setActiveTab('insights')}
+                  className={cn(
+                    "px-6 py-2.5 rounded-xl text-sm font-bold transition-all",
+                    activeTab === 'insights' 
+                      ? "bg-surface-container-lowest shadow-md text-primary" 
+                      : "text-on-surface-variant hover:text-on-surface"
+                  )}
+                >
+                  Monitor de Gastos Recorrentes
+                </button>
               </div>
               <button className="px-8 py-3.5 rounded-2xl bg-surface-container-lowest text-on-surface font-bold flex items-center gap-2.5 border border-outline-variant/10 hover:bg-surface-container-low transition-all shadow-sm">
                 <Filter size={18} />
@@ -415,70 +527,182 @@ export default function Page() {
             previousMonthTotal={comparisonStats.previous}
           />
 
-          {/* Filters & Controls */}
-          <div className="flex flex-wrap items-center gap-5 mb-8 px-2">
-            <div className="flex items-center gap-3 px-6 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5">
-              <Calendar size={18} className="text-primary" />
-              <select 
-                value={selectedMonthYear}
-                onChange={(e) => setSelectedMonthYear(e.target.value)}
-                className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer"
-              >
-                <option value="Todos">Todos os Meses</option>
-                {availableMonths.map(month => (
-                  <option key={month} value={month}>{month}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div className="flex items-center gap-3 px-6 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5">
-              <Tag size={18} className="text-primary" />
-              <select 
-                value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
-                className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer"
-              >
-                <option value="Todas as Categorias">Todas as Categorias</option>
-                {categories.map(cat => (
-                  <option key={cat} value={cat}>{cat}</option>
-                ))}
-              </select>
-            </div>
-            
-            <div className="ml-auto flex items-center gap-4">
-              <label className={cn(
-                "flex items-center gap-2.5 text-primary font-black text-sm hover:underline cursor-pointer transition-all group",
-                isImporting && "opacity-50 cursor-not-allowed pointer-events-none"
-              )}>
-                {isImporting ? (
-                  <Loader2 size={18} className="animate-spin" />
-                ) : (
-                  <Upload size={18} className="group-hover:-translate-y-0.5 transition-transform" />
-                )}
-                {isImporting ? 'Processando...' : 'Importar Despesas'}
-                <input 
-                  type="file" 
-                  className="hidden" 
-                  accept="image/*,application/pdf"
-                  onChange={handleImportFile}
-                  disabled={isImporting}
+          {activeTab === 'table' ? (
+            <>
+              {/* Filters & Controls */}
+              <div className="flex flex-wrap items-center gap-5 mb-8 px-2">
+                <div className="flex items-center gap-3 px-6 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5">
+                  <Calendar size={18} className="text-primary" />
+                  <select 
+                    value={selectedMonthYear}
+                    onChange={(e) => setSelectedMonthYear(e.target.value)}
+                    className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer"
+                  >
+                    <option value="Todos">Todos os Meses</option>
+                    {availableMonths.map(month => (
+                      <option key={month} value={month}>{month}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="flex items-center gap-3 px-6 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5">
+                  <Tag size={18} className="text-primary" />
+                  <select 
+                    value={selectedCategory}
+                    onChange={(e) => setSelectedCategory(e.target.value)}
+                    className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer"
+                  >
+                    <option value="Todas as Categorias">Todas as Categorias</option>
+                    {categories.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+                </div>
+                
+                <div className="ml-auto flex items-center gap-4">
+                  <label className={cn(
+                    "flex items-center gap-2.5 text-primary font-black text-sm hover:underline cursor-pointer transition-all group",
+                    isImporting && "opacity-50 cursor-not-allowed pointer-events-none"
+                  )}>
+                    {isImporting ? (
+                      <Loader2 size={18} className="animate-spin" />
+                    ) : (
+                      <Upload size={18} className="group-hover:-translate-y-0.5 transition-transform" />
+                    )}
+                    {isImporting ? 'Processando...' : 'Importar Despesas'}
+                    <input 
+                      type="file" 
+                      className="hidden" 
+                      accept="image/*,application/pdf"
+                      onChange={handleImportFile}
+                      disabled={isImporting}
+                    />
+                  </label>
+
+                  <button className="flex items-center gap-2.5 text-primary font-black text-sm hover:underline transition-all group">
+                    <Download size={18} className="group-hover:translate-y-0.5 transition-transform" />
+                    Exportar PDF
+                  </button>
+                </div>
+              </div>
+
+              {loading ? (
+                <div className="flex flex-col items-center justify-center py-32 gap-4">
+                  <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-on-surface-variant font-medium">Sincronizando seus registros...</p>
+                </div>
+              ) : (
+                <TransactionTable 
+                  transactions={transactions} 
+                  onDelete={handleDeleteTransaction}
+                  onEdit={handleEditTransaction}
                 />
-              </label>
+              )}
 
-              <button className="flex items-center gap-2.5 text-primary font-black text-sm hover:underline transition-all group">
-                <Download size={18} className="group-hover:translate-y-0.5 transition-transform" />
-                Exportar PDF
-              </button>
+              <InsightCard />
+            </>
+          ) : (
+            <div className="space-y-8">
+              {isAnalyzing ? (
+                <div className="flex flex-col items-center justify-center py-32 gap-6 bg-surface-container-low rounded-[3rem] border border-outline-variant/10">
+                  <div className="relative">
+                    <div className="w-20 h-20 border-4 border-primary/20 rounded-full"></div>
+                    <div className="absolute inset-0 w-20 h-20 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+                    <Sparkles className="absolute inset-0 m-auto text-primary animate-pulse" size={32} />
+                  </div>
+                  <div className="text-center">
+                    <h3 className="text-2xl font-black font-headline text-primary mb-2">Analisando Padrões...</h3>
+                    <p className="text-on-surface-variant font-medium">Nosso assistente está identificando suas assinaturas recorrentes.</p>
+                  </div>
+                </div>
+              ) : subscriptionInsights ? (
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="lg:col-span-2 space-y-6">
+                    <div className="bg-surface-container-low p-8 rounded-[2.5rem] border border-outline-variant/10">
+                      <div className="flex items-center justify-between mb-8">
+                        <h3 className="text-2xl font-black font-headline text-primary">Assinaturas Detectadas</h3>
+                        <button 
+                          onClick={runSubscriptionAnalysis}
+                          className="text-sm font-bold text-primary hover:underline"
+                        >
+                          Recalcular
+                        </button>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        {subscriptionInsights.assinaturas_detectadas.map((sub: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between p-6 bg-surface-container-lowest rounded-3xl border border-outline-variant/5 hover:border-primary/20 transition-all group">
+                            <div className="flex items-center gap-5">
+                              <div className={cn(
+                                "w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm transition-colors",
+                                sub.alerta_zombie ? "bg-error/10 text-error" : "bg-primary/5 text-primary"
+                              )}>
+                                <Receipt size={24} />
+                              </div>
+                              <div>
+                                <p className="font-bold text-on-surface text-lg">{sub.servico}</p>
+                                <div className="flex items-center gap-3 mt-1">
+                                  <span className="text-xs font-bold uppercase tracking-wider text-on-surface-variant/60">Dia {sub.dia_cobrança}</span>
+                                  <span className={cn(
+                                    "text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-tighter",
+                                    sub.confianca_recorrencia === 'ALTA' ? "bg-secondary/10 text-secondary" : 
+                                    sub.confianca_recorrencia === 'MEDIA' ? "bg-primary/10 text-primary" : "bg-on-surface-variant/10 text-on-surface-variant"
+                                  )}>
+                                    Confiança {sub.confianca_recorrencia}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-xl font-black text-on-surface">{formatCurrency(sub.valor)}</p>
+                              {sub.alerta_zombie && (
+                                <p className="text-[10px] font-bold text-error mt-1 flex items-center justify-end gap-1">
+                                  <Sparkles size={10} /> ALERTA ZOMBIE
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-8">
+                    <div className="bg-gradient-to-br from-primary to-primary-container p-8 rounded-[2.5rem] text-on-primary shadow-2xl shadow-primary/20">
+                      <h4 className="text-sm font-bold uppercase tracking-widest opacity-70 mb-4">Potencial de Economia</h4>
+                      <p className="text-5xl font-black font-headline mb-4">{formatCurrency(subscriptionInsights.potencial_economia_mensal)}</p>
+                      <p className="text-sm font-medium opacity-80 leading-relaxed">
+                        Identificamos serviços que podem estar duplicados ou com valores alterados. Cancele o que não usa para economizar.
+                      </p>
+                    </div>
+
+                    <div className="bg-surface-container-low p-8 rounded-[2.5rem] border border-outline-variant/10">
+                      <h4 className="text-lg font-black font-headline text-primary mb-4">Dica do Analista</h4>
+                      <p className="text-sm text-on-surface-variant font-medium leading-relaxed">
+                        Muitas assinaturas &quot;zombie&quot; continuam cobrando mesmo após o período de teste. Verifique sua conta do Google Play e Apple Store para gerenciar esses serviços.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-32 gap-6 bg-surface-container-low rounded-[3rem] border border-outline-variant/10">
+                  <div className="w-20 h-20 rounded-full bg-primary/5 flex items-center justify-center">
+                    <Sparkles className="text-primary" size={32} />
+                  </div>
+                  <div className="text-center max-w-md">
+                    <h3 className="text-2xl font-black font-headline text-primary mb-2">Pronto para Analisar?</h3>
+                    <p className="text-on-surface-variant font-medium mb-8">Clique no botão abaixo para que nosso assistente identifique padrões de assinaturas em suas transações.</p>
+                    <button 
+                      onClick={runSubscriptionAnalysis}
+                      className="px-10 py-4 rounded-2xl bg-primary text-on-primary font-bold shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all"
+                    >
+                      Iniciar Análise
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-
-          <TransactionTable 
-            transactions={transactions} 
-            onDelete={handleDeleteTransaction}
-            onEdit={handleEditTransaction}
-          />
-
-          <InsightCard />
+          )}
         </div>
       </main>
 
