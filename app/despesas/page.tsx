@@ -419,6 +419,7 @@ Sua saída deve ser EXCLUSIVAMENTE um JSON estruturado seguindo este formato:
       "servico": "Nome provável do serviço",
       "valor": 0.00,
       "dia_cobrança": 15,
+      "frequencia_extrato": 3,
       "confianca_recorrencia": "ALTA/MEDIA/BAIXA",
       "alerta_zombie": true/false
     }
@@ -650,6 +651,11 @@ ${JSON.stringify(transactionData, null, 2)}`;
                                   )}>
                                     Confiança {sub.confianca_recorrencia}
                                   </span>
+                                  {sub.frequencia_extrato && (
+                                    <span className="text-[10px] font-bold text-on-surface-variant/40 italic">
+                                      • Apareceu {sub.frequencia_extrato}x no extrato
+                                    </span>
+                                  )}
                                 </div>
                               </div>
                             </div>
