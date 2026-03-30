@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { MoreVertical, ChevronLeft, ChevronRight, Trash2, Edit2 } from 'lucide-react';
+import { MoreVertical, Trash2, Edit2 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -121,20 +121,6 @@ export function TransactionTable({ transactions, onDelete, onEdit }: Transaction
           </AnimatePresence>
         </tbody>
       </table>
-      
-      <div className="p-10 flex items-center justify-between bg-surface-container-low/20">
-        <p className="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Mostrando {transactions.length} de {transactions.length} transações</p>
-        <div className="flex gap-3">
-          <button className="w-10 h-10 rounded-xl bg-surface-container-lowest border border-outline-variant/20 flex items-center justify-center text-on-surface-variant hover:text-primary hover:border-primary/20 transition-all">
-            <ChevronLeft size={18} />
-          </button>
-          <button className="w-10 h-10 rounded-xl bg-primary text-on-primary flex items-center justify-center text-sm font-bold shadow-lg shadow-primary/20">1</button>
-          <button className="w-10 h-10 rounded-xl bg-surface-container-lowest border border-outline-variant/20 flex items-center justify-center text-sm font-bold text-on-surface-variant hover:text-primary hover:border-primary/20 transition-all">2</button>
-          <button className="w-10 h-10 rounded-xl bg-surface-container-lowest border border-outline-variant/20 flex items-center justify-center text-on-surface-variant hover:text-primary hover:border-primary/20 transition-all">
-            <ChevronRight size={18} />
-          </button>
-        </div>
-      </div>
     </div>
   );
 }

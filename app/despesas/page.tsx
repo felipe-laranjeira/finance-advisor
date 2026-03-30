@@ -7,7 +7,7 @@ import { Stats } from '@/components/Stats';
 import { TransactionTable } from '@/components/TransactionTable';
 import { InsightCard } from '@/components/InsightCard';
 import { TransactionModal } from '@/components/TransactionModal';
-import { Filter, Download, Calendar, Tag, Upload, Loader2, Sparkles, Receipt } from 'lucide-react';
+import { Filter, Download, Calendar, Tag, Upload, Loader2, Sparkles, Receipt, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -38,6 +38,9 @@ export default function Page() {
   const [activeTab, setActiveTab] = useState<'table' | 'insights'>('table');
   const [subscriptionInsights, setSubscriptionInsights] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [totalCount, setTotalCount] = useState(0);
   const router = useRouter();
 
   useEffect(() => {
@@ -143,7 +146,7 @@ export default function Page() {
 
     let query = supabase
       .from('transactions')
-      .select(selectString);
+      .select(selectString, { count: 'exact' });
 
     if (selectedCategory !== 'Todas as Categorias') {
       query = query.eq('categories.name', selectedCategory);
@@ -164,11 +167,14 @@ export default function Page() {
       }
     }
 
-    const { data, error } = await query.order('date', { ascending: false });
+    const { data, error, count } = await query
+      .order('date', { ascending: false })
+      .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
 
     if (error) {
       console.error('Error fetching transactions:', error);
     } else {
+      setTotalCount(count || 0);
       const formatted = data.map((t: any) => ({
         id: t.id,
         date: new Date(t.date),
@@ -181,6 +187,10 @@ export default function Page() {
       setTransactions(formatted);
     }
     setLoading(false);
+  }, [selectedCategory, selectedMonthYear, currentPage, pageSize]);
+
+  useEffect(() => {
+    setCurrentPage(1);
   }, [selectedCategory, selectedMonthYear]);
 
   useEffect(() => {
@@ -593,11 +603,92 @@ ${JSON.stringify(transactionData, null, 2)}`;
                   <p className="text-on-surface-variant font-medium">Sincronizando seus registros...</p>
                 </div>
               ) : (
-                <TransactionTable 
-                  transactions={transactions} 
-                  onDelete={handleDeleteTransaction}
-                  onEdit={handleEditTransaction}
-                />
+                <>
+                  <TransactionTable 
+                    transactions={transactions} 
+                    onDelete={handleDeleteTransaction}
+                    onEdit={handleEditTransaction}
+                  />
+
+                  {/* Pagination Controls */}
+                  <div className="mt-8 flex flex-col md:flex-row items-center justify-between gap-6 px-2">
+                    <div className="flex items-center gap-4">
+                      <span className="text-sm font-bold text-on-surface-variant">Mostrar:</span>
+                      <select 
+                        value={pageSize}
+                        onChange={(e) => {
+                          setPageSize(parseInt(e.target.value));
+                          setCurrentPage(1);
+                        }}
+                        className="bg-surface-container-low border border-outline-variant/10 rounded-xl px-4 py-2 text-sm font-bold text-on-surface focus:ring-2 focus:ring-primary outline-none cursor-pointer transition-all"
+                      >
+                        <option value={25}>25</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                      <span className="text-sm font-bold text-on-surface-variant/60">
+                        {totalCount > 0 ? (
+                          <>
+                            {Math.min((currentPage - 1) * pageSize + 1, totalCount)} - {Math.min(currentPage * pageSize, totalCount)} de {totalCount}
+                          </>
+                        ) : '0 - 0 de 0'}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button 
+                        disabled={currentPage === 1}
+                        onClick={() => setCurrentPage(prev => prev - 1)}
+                        className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-container-low border border-outline-variant/10 text-on-surface-variant disabled:opacity-30 hover:bg-surface-container-high transition-all"
+                      >
+                        <ChevronLeft size={20} />
+                      </button>
+                      
+                      <div className="flex items-center gap-1.5">
+                        {Array.from({ length: Math.ceil(totalCount / pageSize) }).map((_, i) => {
+                          const pageNum = i + 1;
+                          const totalPages = Math.ceil(totalCount / pageSize);
+                          
+                          // Logic to show limited page numbers
+                          if (
+                            pageNum === 1 || 
+                            pageNum === totalPages || 
+                            (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
+                          ) {
+                            return (
+                              <button
+                                key={pageNum}
+                                onClick={() => setCurrentPage(pageNum)}
+                                className={cn(
+                                  "w-10 h-10 rounded-xl text-sm font-bold transition-all",
+                                  currentPage === pageNum 
+                                    ? "bg-primary text-on-primary shadow-lg shadow-primary/20" 
+                                    : "text-on-surface-variant hover:bg-surface-container-high"
+                                )}
+                              >
+                                {pageNum}
+                              </button>
+                            );
+                          } else if (
+                            pageNum === currentPage - 2 || 
+                            pageNum === currentPage + 2
+                          ) {
+                            return <span key={pageNum} className="text-on-surface-variant/40 font-bold px-1">...</span>;
+                          }
+                          return null;
+                        })}
+                      </div>
+
+                      <button 
+                        disabled={currentPage >= Math.ceil(totalCount / pageSize)}
+                        onClick={() => setCurrentPage(prev => prev + 1)}
+                        className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-container-low border border-outline-variant/10 text-on-surface-variant disabled:opacity-30 hover:bg-surface-container-high transition-all"
+                      >
+                        <ChevronRight size={20} />
+                      </button>
+                    </div>
+                  </div>
+                </>
               )}
 
               <InsightCard />
