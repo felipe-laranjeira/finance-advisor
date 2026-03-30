@@ -41,6 +41,8 @@ export default function Page() {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [totalCount, setTotalCount] = useState(0);
+  const [budgetReview, setBudgetReview] = useState<string | null>(null);
+  const [isReviewing, setIsReviewing] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -303,7 +305,12 @@ export default function Page() {
         reader.readAsDataURL(file);
       });
 
-      const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY });
+      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("Configuração ausente: NEXT_PUBLIC_GEMINI_API_KEY não encontrada.");
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
       
       const currentCategories = categories.length > 0 ? categories : ['Alimentação', 'Transporte', 'Saúde', 'Educação', 'Lazer', 'Moradia', 'Outros'];
       
@@ -397,12 +404,16 @@ export default function Page() {
 
   const isSupabaseConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  const runSubscriptionAnalysis = async () => {
+  const runSubscriptionAnalysis = useCallback(async () => {
     if (transactions.length === 0) return;
     
     setIsAnalyzing(true);
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_GEMINI_API_KEY! });
+      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("Configuração ausente: NEXT_PUBLIC_GEMINI_API_KEY não encontrada.");
+      }
+      const ai = new GoogleGenAI({ apiKey });
       const model = "gemini-3-flash-preview";
       
       const transactionData = transactions.map(t => ({
@@ -459,13 +470,72 @@ ${JSON.stringify(transactionData, null, 2)}`;
     } finally {
       setIsAnalyzing(false);
     }
-  };
+  }, [transactions]);
 
   useEffect(() => {
     if (activeTab === 'insights' && !subscriptionInsights && !isAnalyzing) {
       runSubscriptionAnalysis();
     }
-  }, [activeTab]);
+  }, [activeTab, subscriptionInsights, isAnalyzing, runSubscriptionAnalysis]);
+
+  const handleReviewBudget = async (months: number = 3) => {
+    setIsReviewing(true);
+    try {
+      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error("Configuração ausente: NEXT_PUBLIC_GEMINI_API_KEY não encontrada.");
+      }
+      const ai = new GoogleGenAI({ apiKey });
+      const model = "gemini-3-flash-preview";
+
+      // Fetch last X months of transactions
+      const startDate = new Date();
+      startDate.setMonth(startDate.getMonth() - months);
+      
+      const { data, error } = await supabase
+        .from('transactions')
+        .select('*')
+        .gte('date', startDate.toISOString().split('T')[0])
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+
+      const transactionData = data.map((t: any) => ({
+        description: t.description,
+        amount: t.amount,
+        date: t.date,
+        category: t.category
+      }));
+
+      const prompt = `Você é um Consultor Financeiro Pessoal de elite do Atelier Fiscal.
+      
+      Analise as seguintes transações dos últimos ${months} meses:
+      ${JSON.stringify(transactionData, null, 2)}
+      
+      Sua tarefa é:
+      1. Identificar os 3 maiores "desperdícios" ou gastos excessivos (ex: assinaturas não usadas, gastos impulsivos com delivery, taxas bancárias, etc).
+      2. Calcular o montante total que poderia ser economizado se esses gastos fossem eliminados.
+      3. Dar dicas práticas e motivadoras de como utilizar esse montante economizado (ex: investir, criar reserva de emergência, realizar um sonho específico).
+      
+      Responda de forma direta, profissional e empática, em português do Brasil. Use tópicos para facilitar a leitura. Não use negrito excessivo.`;
+
+      const response = await ai.models.generateContent({
+        model,
+        contents: prompt,
+      });
+
+      setBudgetReview(response.text || "Não foi possível gerar a revisão no momento.");
+    } catch (error) {
+      console.error('Erro na revisão de orçamento:', error);
+      setBudgetReview("Erro ao processar a revisão. Verifique sua conexão e tente novamente.");
+    } finally {
+      setIsReviewing(false);
+    }
+  };
+
+  const handleDiscardReview = () => {
+    setBudgetReview(null);
+  };
 
   if (authLoading) {
     return <div className="min-h-screen bg-surface flex items-center justify-center">
@@ -691,7 +761,12 @@ ${JSON.stringify(transactionData, null, 2)}`;
                 </>
               )}
 
-              <InsightCard />
+              <InsightCard 
+                onReview={handleReviewBudget}
+                onDiscard={handleDiscardReview}
+                reviewText={budgetReview}
+                isLoading={isReviewing}
+              />
             </>
           ) : (
             <div className="space-y-8">

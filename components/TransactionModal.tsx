@@ -25,10 +25,26 @@ interface TransactionModalProps {
 
 export function TransactionModal({ isOpen, onClose, onSave, editingTransaction }: TransactionModalProps) {
   const [categories, setCategories] = useState<string[]>([]);
+  const maskCurrency = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    if (!digits) return '';
+    const amount = parseInt(digits, 10) / 100;
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(amount);
+  };
+
+  const parseCurrency = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    if (!digits) return 0;
+    return parseInt(digits, 10) / 100;
+  };
+
   const [formData, setFormData] = useState({
     description: editingTransaction?.description || '',
     category: editingTransaction?.category || 'Outros',
-    amount: editingTransaction ? Math.abs(editingTransaction.amount).toString() : '',
+    amount: editingTransaction ? maskCurrency((Math.abs(editingTransaction.amount) * 100).toFixed(0)) : '',
     date: editingTransaction ? new Date(editingTransaction.date).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
   });
 
@@ -52,7 +68,7 @@ export function TransactionModal({ isOpen, onClose, onSave, editingTransaction }
       subtext: '',
       category: formData.category,
       status: 'Pago',
-      amount: -Math.abs(parseFloat(formData.amount)),
+      amount: -Math.abs(parseCurrency(formData.amount)),
       date: new Date(formData.date),
     });
     onClose();
@@ -100,15 +116,14 @@ export function TransactionModal({ isOpen, onClose, onSave, editingTransaction }
 
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <label className="text-xs font-black uppercase tracking-widest text-on-surface-variant ml-1">Valor (R$)</label>
+                    <label className="text-xs font-black uppercase tracking-widest text-on-surface-variant ml-1">Valor</label>
                     <input
                       required
-                      type="number"
-                      step="0.01"
+                      type="text"
                       value={formData.amount}
-                      onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, amount: maskCurrency(e.target.value) })}
                       className="w-full px-6 py-4 bg-surface-container-high border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-bold text-lg"
-                      placeholder="0,00"
+                      placeholder="R$ 0,00"
                     />
                   </div>
                   <div className="space-y-2">
