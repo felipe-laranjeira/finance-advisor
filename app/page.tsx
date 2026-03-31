@@ -6,47 +6,21 @@ import { supabase } from '@/lib/supabase';
 import { Mail, Lock } from 'lucide-react';
 import { motion } from 'motion/react';
 
+import { useAuth } from '@/components/AuthProvider';
+
 export default function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
-  const [authLoading, setAuthLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const { user, loading: authLoading } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        router.push('/despesas');
-      } else {
-        setAuthLoading(false);
-      }
-    });
-
-    const checkUser = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error) {
-          // If there's an error (like refresh token not found), clear session
-          await supabase.auth.signOut();
-          setAuthLoading(false);
-        } else if (session) {
-          router.push('/despesas');
-        } else {
-          setAuthLoading(false);
-        }
-      } catch (err) {
-        console.error('Auth check error:', err);
-        setAuthLoading(false);
-      }
-    };
-    
-    checkUser();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [router]);
+    if (user) {
+      router.push('/despesas');
+    }
+  }, [user, router]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();

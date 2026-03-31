@@ -17,6 +17,8 @@ export const metadata: Metadata = {
   description: 'Acompanhamento abrangente de suas saídas fiscais e compromissos.',
 };
 
+import { AuthProvider } from '@/components/AuthProvider';
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" className={`${inter.variable} ${manrope.variable}`}>
@@ -24,7 +26,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
       </head>
       <body suppressHydrationWarning className="bg-[#f7f9fc] text-[#191c1e] antialiased">
-        {children}
+        <AuthProvider>
+          {children}
+        </AuthProvider>
       </body>
     </html>
   );

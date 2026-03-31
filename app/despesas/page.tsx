@@ -23,8 +23,10 @@ interface Transaction {
   amount: number;
 }
 
+import { useAuth } from '@/components/AuthProvider';
+
 export default function Page() {
-  const [user, setUser] = useState<any>(null);
+  const { user, loading: authLoading } = useAuth();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -33,7 +35,6 @@ export default function Page() {
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('Todas as Categorias');
   const [selectedMonthYear, setSelectedMonthYear] = useState<string>('Todos');
-  const [authLoading, setAuthLoading] = useState(true);
   const [isImporting, setIsImporting] = useState(false);
   const [comparisonStats, setComparisonStats] = useState({ current: 0, previous: 0 });
   const [activeTab, setActiveTab] = useState<'table' | 'insights'>('table');
@@ -46,46 +47,13 @@ export default function Page() {
   const [isReviewing, setIsReviewing] = useState(false);
   const router = useRouter();
 
-  useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || !session) {
-        router.push('/');
-      } else {
-        setUser(session.user);
-        setAuthLoading(false);
-      }
-    });
-
-    const checkUser = async () => {
-      try {
-        const { data: { session }, error } = await supabase.auth.getSession();
-        if (error || !session) {
-          await supabase.auth.signOut();
-          router.push('/');
-        } else {
-          setUser(session.user);
-          setAuthLoading(false);
-        }
-      } catch (err) {
-        console.error('Auth check error:', err);
-        router.push('/');
-      }
-    };
-    
-    checkUser();
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [router]);
-
   const fetchAvailableMonths = useCallback(async () => {
     if (!user) return;
 
     const { data, error } = await supabase
       .from('transactions')
       .select('date')
-      .eq('user_id', user.id)
+      .eq('user_id', user!.id)
       .order('date', { ascending: false });
 
     if (error) {
@@ -126,8 +94,8 @@ export default function Page() {
     const endOfPrevious = new Date(currentYear, currentMonth, 0).toISOString().split('T')[0];
 
     const [currentRes, previousRes] = await Promise.all([
-      supabase.from('transactions').select('amount').eq('user_id', user.id).gte('date', startOfCurrent).lte('date', endOfCurrent),
-      supabase.from('transactions').select('amount').eq('user_id', user.id).gte('date', startOfPrevious).lte('date', endOfPrevious)
+      supabase.from('transactions').select('amount').eq('user_id', user!.id).gte('date', startOfCurrent).lte('date', endOfCurrent),
+      supabase.from('transactions').select('amount').eq('user_id', user!.id).gte('date', startOfPrevious).lte('date', endOfPrevious)
     ]);
 
     const currentTotal = Math.abs(currentRes.data?.reduce((acc, t) => acc + parseFloat(t.amount), 0) || 0);
@@ -154,7 +122,7 @@ export default function Page() {
     let query = supabase
       .from('transactions')
       .select(selectString, { count: 'exact' })
-      .eq('user_id', user.id);
+      .eq('user_id', user!.id);
 
     if (selectedCategory !== 'Todas as Categorias') {
       query = query.eq('categories.name', selectedCategory);
@@ -263,7 +231,7 @@ export default function Page() {
       amount: data.amount,
       date: data.date.toISOString().split('T')[0],
       category_id: catData?.id,
-      user_id: user.id,
+      user_id: user!.id,
     };
 
     if (data.id) {
@@ -271,7 +239,7 @@ export default function Page() {
         .from('transactions')
         .update(payload)
         .eq('id', data.id)
-        .eq('user_id', user.id);
+        .eq('user_id', user!.id);
       if (error) {
         console.error('Error updating:', error);
       } else if (catData?.id) {
@@ -279,7 +247,7 @@ export default function Page() {
         await supabase
           .from('transactions_category_instruction')
           .upsert({
-            user_id: user.id,
+            user_id: user!.id,
             description: data.description,
             category_id: catData.id,
             updated_at: new Date().toISOString()
@@ -296,7 +264,7 @@ export default function Page() {
         await supabase
           .from('transactions_category_instruction')
           .upsert({
-            user_id: user.id,
+            user_id: user!.id,
             description: data.description,
             category_id: catData.id,
             updated_at: new Date().toISOString()
@@ -314,7 +282,7 @@ export default function Page() {
       .from('transactions')
       .delete()
       .eq('id', id)
-      .eq('user_id', user.id);
+      .eq('user_id', user!.id);
     
     if (error) {
       console.error('Error deleting:', error);
@@ -331,7 +299,7 @@ export default function Page() {
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !user) return;
 
     setIsImporting(true);
     try {
@@ -360,7 +328,7 @@ export default function Page() {
             name
           )
         `)
-        .eq('user_id', user.id);
+        .eq('user_id', user!.id);
 
       const instructionsText = instructions && instructions.length > 0 
         ? `Use estas instruções de categorização personalizadas do usuário (prioridade máxima):
@@ -405,7 +373,7 @@ export default function Page() {
         Se não encontrar despesas, retorne um array vazio [].
       `;
 
-      const authContext = { user_id: user.id, session_id: "client-session" };
+      const authContext = { user_id: user!.id, session_id: "client-session" };
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [
@@ -455,7 +423,7 @@ export default function Page() {
             amount: -Math.abs(item.amount), // Ensure it's stored as a negative value as requested
             date: item.date,
             category_id: categoryMap.get(categoryName) || defaultCategoryId,
-            user_id: user.id,
+            user_id: user!.id,
           };
         });
 
@@ -496,7 +464,7 @@ export default function Page() {
       
       const transactionData = transactions.map(t => ({
         id: t.id,
-        user_id: user.id,
+        user_id: user!.id,
         description: t.description,
         amount: t.amount,
         date: t.date.toISOString().split('T')[0],
@@ -602,14 +570,14 @@ ${JSON.stringify(inputContext, null, 2)}`;
 
       const transactionData = data.map((t: any) => ({
         id: t.id,
-        user_id: user.id,
+        user_id: user!.id,
         description: t.description,
         amount: t.amount,
         date: t.date,
         category: t.category
       }));
 
-      const authContext = { user_id: user.id, session_id: "client-session" };
+      const authContext = { user_id: user!.id, session_id: "client-session" };
       const inputContext = {
         auth_context: authContext,
         data_payload: transactionData
