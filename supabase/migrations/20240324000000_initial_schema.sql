@@ -21,5 +21,8 @@ INSERT INTO categories (name) VALUES
   ('Mercado'),
   ('Transporte'),
   ('Entretenimento'),
+  ('Salário'),
+  ('Freelance'),
+  ('Investimentos'),
   ('Outros')
 ON CONFLICT (name) DO NOTHING;

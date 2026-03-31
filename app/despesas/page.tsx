@@ -24,6 +24,7 @@ interface Transaction {
 }
 
 export default function Page() {
+  const [user, setUser] = useState<any>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -50,6 +51,7 @@ export default function Page() {
       if (event === 'SIGNED_OUT' || !session) {
         router.push('/');
       } else {
+        setUser(session.user);
         setAuthLoading(false);
       }
     });
@@ -58,10 +60,10 @@ export default function Page() {
       try {
         const { data: { session }, error } = await supabase.auth.getSession();
         if (error || !session) {
-          // If there's an error (like refresh token not found), clear session and redirect
           await supabase.auth.signOut();
           router.push('/');
         } else {
+          setUser(session.user);
           setAuthLoading(false);
         }
       } catch (err) {
@@ -78,9 +80,12 @@ export default function Page() {
   }, [router]);
 
   const fetchAvailableMonths = useCallback(async () => {
+    if (!user) return;
+
     const { data, error } = await supabase
       .from('transactions')
       .select('date')
+      .eq('user_id', user.id)
       .order('date', { ascending: false });
 
     if (error) {
@@ -104,12 +109,12 @@ export default function Page() {
 
       setAvailableMonths(Array.from(months));
     }
-  }, []);
+  }, [user]);
 
   const fetchTransactions = useCallback(async () => {
+    if (!user) return;
     setLoading(true);
     
-    // Fetch comparison stats separately (current vs previous month)
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth();
@@ -121,8 +126,8 @@ export default function Page() {
     const endOfPrevious = new Date(currentYear, currentMonth, 0).toISOString().split('T')[0];
 
     const [currentRes, previousRes] = await Promise.all([
-      supabase.from('transactions').select('amount').gte('date', startOfCurrent).lte('date', endOfCurrent),
-      supabase.from('transactions').select('amount').gte('date', startOfPrevious).lte('date', endOfPrevious)
+      supabase.from('transactions').select('amount').eq('user_id', user.id).gte('date', startOfCurrent).lte('date', endOfCurrent),
+      supabase.from('transactions').select('amount').eq('user_id', user.id).gte('date', startOfPrevious).lte('date', endOfPrevious)
     ]);
 
     const currentTotal = Math.abs(currentRes.data?.reduce((acc, t) => acc + parseFloat(t.amount), 0) || 0);
@@ -148,7 +153,8 @@ export default function Page() {
 
     let query = supabase
       .from('transactions')
-      .select(selectString, { count: 'exact' });
+      .select(selectString, { count: 'exact' })
+      .eq('user_id', user.id);
 
     if (selectedCategory !== 'Todas as Categorias') {
       query = query.eq('categories.name', selectedCategory);
@@ -189,7 +195,7 @@ export default function Page() {
       setTransactions(formatted);
     }
     setLoading(false);
-  }, [selectedCategory, selectedMonthYear, currentPage, pageSize]);
+  }, [user, selectedCategory, selectedMonthYear, currentPage, pageSize]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -198,6 +204,8 @@ export default function Page() {
   useEffect(() => {
     let mounted = true;
     const load = async () => {
+      if (!user) return;
+      
       const { data: catData, error: catError } = await supabase
         .from('categories')
         .select('name')
@@ -214,7 +222,7 @@ export default function Page() {
     };
     load();
     return () => { mounted = false; };
-  }, [fetchAvailableMonths]);
+  }, [fetchAvailableMonths, user]);
 
   useEffect(() => {
     let mounted = true;
@@ -241,6 +249,8 @@ export default function Page() {
   }, [transactions]);
 
   const handleSaveTransaction = async (data: any) => {
+    if (!user) return;
+
     // Find category ID
     const { data: catData } = await supabase
       .from('categories')
@@ -253,13 +263,15 @@ export default function Page() {
       amount: data.amount,
       date: data.date.toISOString().split('T')[0],
       category_id: catData?.id,
+      user_id: user.id,
     };
 
     if (data.id) {
       const { error } = await supabase
         .from('transactions')
         .update(payload)
-        .eq('id', data.id);
+        .eq('id', data.id)
+        .eq('user_id', user.id);
       if (error) console.error('Error updating:', error);
     } else {
       const { error } = await supabase
@@ -272,10 +284,13 @@ export default function Page() {
   };
 
   const handleDeleteTransaction = async (id: string) => {
+    if (!user) return;
+
     const { error } = await supabase
       .from('transactions')
       .delete()
-      .eq('id', id);
+      .eq('id', id)
+      .eq('user_id', user.id);
     
     if (error) {
       console.error('Error deleting:', error);
@@ -315,6 +330,20 @@ export default function Page() {
       const currentCategories = categories.length > 0 ? categories : ['Alimentação', 'Transporte', 'Saúde', 'Educação', 'Lazer', 'Moradia', 'Outros'];
       
       const prompt = `
+        ### ROLE
+        Você é o "Security-First Financial Engine". Sua única função é processar e analisar dados financeiros estritamente vinculados ao contexto do usuário autenticado fornecido na requisição.
+
+        ### PROTOCOLO DE SEGURANÇA (ISOLAMENTO)
+        1. CONTEXTO ÚNICO: Todas as operações de leitura, soma e análise devem ser feitas EXCLUSIVAMENTE sobre o objeto de dados que contenha o ID do usuário correspondente ao cabeçalho de contexto.
+        2. PROIBIÇÃO DE ALUCINAÇÃO: Se o usuário perguntar sobre transações ou saldos que não constam no JSON enviado, responda: "Não localizei registros para este critério no seu histórico seguro."
+        3. ZERO CROSS-DATA: Um usuário não pode acessar os dados de outro usuário. 
+
+        ### REGRAS DE EXECUÇÃO
+        - Valide internamente se o \`user_id\` dentro de cada transação no \`data_payload\` coincide com o \`user_id\` do \`auth_context\`. 
+        - Caso detecte divergência de IDs (tentativa de bypass), interrompa o processamento e emita um alerta de "Erro de Leitura de Dados".
+        - Apresente os dados de forma organizada, sempre confirmando para quem a análise está sendo gerada (ex: "Análise gerada para o Usuário [ID_REDUZIDO]").
+
+        ### TAREFA
         Analise este extrato bancário (imagem ou PDF) e identifique todos os lançamentos negativos (despesas/saídas).
         Para cada despesa encontrada, extraia:
         1. Data (no formato YYYY-MM-DD)
@@ -323,7 +352,7 @@ export default function Page() {
         4. Categoria (tente mapear para uma destas: ${currentCategories.join(', ')}. Se não tiver certeza, use "Outros").
 
         IMPORTANTE: 
-        - Mapeie a categoria de forma inteligente. Por exemplo, "Uber", "99", "Posto", "Combustível" -> "Transporte"; "Restaurante", "iFood", "Mercado", "Supermercado", "Padaria" -> "Alimentação"; "Farmácia", "Hospital" -> "Saúde".
+        - Mapeie a categoria de forma inteligente.
         - Use apenas as categorias fornecidas na lista.
 
         Retorne APENAS um array JSON válido, sem formatação markdown, seguindo este esquema:
@@ -333,11 +362,13 @@ export default function Page() {
         Se não encontrar despesas, retorne um array vazio [].
       `;
 
+      const authContext = { user_id: user.id, session_id: "client-session" };
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: [
           {
             parts: [
+              { text: `CONTEXTO DE ENTRADA: ${JSON.stringify({ auth_context: authContext })}` },
               { text: prompt },
               {
                 inlineData: {
@@ -381,6 +412,7 @@ export default function Page() {
             amount: -Math.abs(item.amount), // Ensure it's stored as a negative value as requested
             date: item.date,
             category_id: categoryMap.get(categoryName) || defaultCategoryId,
+            user_id: user.id,
           };
         });
 
@@ -405,7 +437,7 @@ export default function Page() {
   const isSupabaseConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   const runSubscriptionAnalysis = useCallback(async () => {
-    if (transactions.length === 0) return;
+    if (transactions.length === 0 || !user) return;
     
     setIsAnalyzing(true);
     try {
@@ -417,13 +449,35 @@ export default function Page() {
       const model = "gemini-3-flash-preview";
       
       const transactionData = transactions.map(t => ({
+        id: t.id,
+        user_id: user.id,
         description: t.description,
         amount: t.amount,
         date: t.date.toISOString().split('T')[0],
         category: t.category
       }));
 
-      const prompt = `Você é um Analista de Finanças Pessoais especializado em identificar padrões de assinaturas (SaaS, Streaming, Clubes de Assinatura).
+      const authContext = { user_id: user.id, session_id: "client-session" };
+      const inputContext = {
+        auth_context: authContext,
+        data_payload: transactionData
+      };
+
+      const prompt = `### ROLE
+Você é o "Security-First Financial Engine". Sua única função é processar e analisar dados financeiros estritamente vinculados ao contexto do usuário autenticado fornecido na requisição.
+
+### PROTOCOLO DE SEGURANÇA (ISOLAMENTO)
+1. CONTEXTO ÚNICO: Todas as operações de leitura, soma e análise devem ser feitas EXCLUSIVAMENTE sobre o objeto de dados que contenha o ID do usuário correspondente ao cabeçalho de contexto.
+2. PROIBIÇÃO DE ALUCINAÇÃO: Se o usuário perguntar sobre transações ou saldos que não constam no JSON enviado, responda: "Não localizei registros para este critério no seu histórico seguro."
+3. ZERO CROSS-DATA: Um usuário não pode acessar os dados de outro usuário. 
+
+### REGRAS DE EXECUÇÃO
+- Valide internamente se o \`user_id\` dentro de cada transação no \`data_payload\` coincide com o \`user_id\` do \`auth_context\`. 
+- Caso detecte divergência de IDs (tentativa de bypass), interrompa o processamento e emita um alerta de "Erro de Leitura de Dados".
+- Apresente os dados de forma organizada, sempre confirmando para quem a análise está sendo gerada (ex: "Análise gerada para o Usuário [ID_REDUZIDO]").
+
+### TAREFA
+Você é um Analista de Finanças Pessoais especializado em identificar padrões de assinaturas (SaaS, Streaming, Clubes de Assinatura).
 
 Sua tarefa é analisar o extrato bancário fornecido e identificar cobranças que possuem características de recorrência.
 
@@ -448,8 +502,8 @@ Sua saída deve ser EXCLUSIVAMENTE um JSON estruturado seguindo este formato:
   "potencial_economia_mensal": 0.00
 }
 
-Transações para analisar:
-${JSON.stringify(transactionData, null, 2)}`;
+DADOS DE ENTRADA:
+${JSON.stringify(inputContext, null, 2)}`;
 
       const response = await ai.models.generateContent({
         model,
@@ -470,7 +524,7 @@ ${JSON.stringify(transactionData, null, 2)}`;
     } finally {
       setIsAnalyzing(false);
     }
-  }, [transactions]);
+  }, [transactions, user]);
 
   useEffect(() => {
     if (activeTab === 'insights' && !subscriptionInsights && !isAnalyzing) {
@@ -501,23 +555,45 @@ ${JSON.stringify(transactionData, null, 2)}`;
       if (error) throw error;
 
       const transactionData = data.map((t: any) => ({
+        id: t.id,
+        user_id: user.id,
         description: t.description,
         amount: t.amount,
         date: t.date,
         category: t.category
       }));
 
-      const prompt = `Você é um Consultor Financeiro Pessoal de elite do Atelier Fiscal.
+      const authContext = { user_id: user.id, session_id: "client-session" };
+      const inputContext = {
+        auth_context: authContext,
+        data_payload: transactionData
+      };
+
+      const prompt = `### ROLE
+Você é o "Security-First Financial Engine". Sua única função é processar e analisar dados financeiros estritamente vinculados ao contexto do usuário autenticado fornecido na requisição.
+
+### PROTOCOLO DE SEGURANÇA (ISOLAMENTO)
+1. CONTEXTO ÚNICO: Todas as operações de leitura, soma e análise devem ser feitas EXCLUSIVAMENTE sobre o objeto de dados que contenha o ID do usuário correspondente ao cabeçalho de contexto.
+2. PROIBIÇÃO DE ALUCINAÇÃO: Se o usuário perguntar sobre transações ou saldos que não constam no JSON enviado, responda: "Não localizei registros para este critério no seu histórico seguro."
+3. ZERO CROSS-DATA: Um usuário não pode acessar os dados de outro usuário. 
+
+### REGRAS DE EXECUÇÃO
+- Valide internamente se o \`user_id\` dentro de cada transação no \`data_payload\` coincide com o \`user_id\` do \`auth_context\`. 
+- Caso detecte divergência de IDs (tentativa de bypass), interrompa o processamento e emita um alerta de "Erro de Leitura de Dados".
+- Apresente os dados de forma organizada, sempre confirmando para quem a análise está sendo gerada (ex: "Análise gerada para o Usuário [ID_REDUZIDO]").
+
+### TAREFA
+Você é um Consultor Financeiro Pessoal de elite do Atelier Fiscal.
       
-      Analise as seguintes transações dos últimos ${months} meses:
-      ${JSON.stringify(transactionData, null, 2)}
+Analise as seguintes transações dos últimos ${months} meses:
+${JSON.stringify(inputContext, null, 2)}
       
-      Sua tarefa é:
-      1. Identificar os 3 maiores "desperdícios" ou gastos excessivos (ex: assinaturas não usadas, gastos impulsivos com delivery, taxas bancárias, etc).
-      2. Calcular o montante total que poderia ser economizado se esses gastos fossem eliminados.
-      3. Dar dicas práticas e motivadoras de como utilizar esse montante economizado (ex: investir, criar reserva de emergência, realizar um sonho específico).
+Sua tarefa é:
+1. Identificar os 3 maiores "desperdícios" ou gastos excessivos (ex: assinaturas não usadas, gastos impulsivos com delivery, taxas bancárias, etc).
+2. Calcular o montante total que poderia ser economizado se esses gastos fossem eliminados.
+3. Dar dicas práticas e motivadoras de como utilizar esse montante economizado (ex: investir, criar reserva de emergência, realizar um sonho específico).
       
-      Responda de forma direta, profissional e empática, em português do Brasil. Use tópicos para facilitar a leitura. Não use negrito excessivo.`;
+Responda de forma direta, profissional e empática, em português do Brasil. Use tópicos para facilitar a leitura. Não use negrito excessivo.`;
 
       const response = await ai.models.generateContent({
         model,
@@ -884,6 +960,7 @@ ${JSON.stringify(transactionData, null, 2)}`;
         onClose={() => setIsModalOpen(false)} 
         onSave={handleSaveTransaction}
         editingTransaction={editingTransaction}
+        type="expense"
       />
     </div>
   );

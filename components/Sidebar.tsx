@@ -19,14 +19,15 @@ import { supabase } from '@/lib/supabase';
 
 const menuItems = [
   { icon: LayoutDashboard, label: 'Painel', href: '#', active: false },
-  { icon: ArrowDownCircle, label: 'Receitas', href: '#', active: false },
-  { icon: Receipt, label: 'Despesas', href: '/despesas', active: true },
-  { icon: BarChart3, label: 'Relatórios', href: '#', active: false },
+  { icon: ArrowDownCircle, label: 'Receitas', href: '/receitas', active: false },
+  { icon: Receipt, label: 'Despesas', href: '/despesas', active: false },
+  { icon: BarChart3, label: 'Investimentos', href: '/investimentos', active: false },
   { icon: Settings, label: 'Configurações', href: '#', active: false },
 ];
 
 export function Sidebar() {
   const router = useRouter();
+  const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -46,21 +47,24 @@ export function Sidebar() {
 
         {/* Navigation Links */}
         <nav className="flex-1 space-y-2">
-          {menuItems.map((item) => (
-            <a
-              key={item.label}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 px-4 py-3 transition-all duration-200 rounded-xl text-sm font-medium",
-                item.active 
-                  ? "bg-surface-container-lowest text-primary shadow-sm font-bold" 
-                  : "text-on-surface-variant hover:bg-surface-container-highest"
-              )}
-            >
-              <item.icon size={20} className={item.active ? "text-primary fill-primary/10" : ""} />
-              <span>{item.label}</span>
-            </a>
-          ))}
+          {menuItems.map((item) => {
+            const isActive = currentPath === item.href;
+            return (
+              <a
+                key={item.label}
+                href={item.href}
+                className={cn(
+                  "flex items-center gap-3 px-4 py-3 transition-all duration-200 rounded-xl text-sm font-medium",
+                  isActive 
+                    ? "bg-surface-container-lowest text-primary shadow-sm font-bold" 
+                    : "text-on-surface-variant hover:bg-surface-container-highest"
+                )}
+              >
+                <item.icon size={20} className={isActive ? "text-primary fill-primary/10" : ""} />
+                <span>{item.label}</span>
+              </a>
+            );
+          })}
         </nav>
 
         {/* CTA */}

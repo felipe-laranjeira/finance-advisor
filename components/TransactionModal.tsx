@@ -21,10 +21,19 @@ interface TransactionModalProps {
   onClose: () => void;
   onSave: (transaction: Omit<Transaction, 'id'> & { id?: string }) => void;
   editingTransaction?: Transaction | null;
+  type?: 'expense' | 'income' | 'investment';
 }
 
-export function TransactionModal({ isOpen, onClose, onSave, editingTransaction }: TransactionModalProps) {
+export function TransactionModal({ isOpen, onClose, onSave, editingTransaction, type = 'expense' }: TransactionModalProps) {
   const [categories, setCategories] = useState<string[]>([]);
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+  }, []);
+
   const maskCurrency = (value: string) => {
     const digits = value.replace(/\D/g, '');
     if (!digits) return '';
@@ -51,28 +60,36 @@ export function TransactionModal({ isOpen, onClose, onSave, editingTransaction }
   useEffect(() => {
     let mounted = true;
     const fetchCategories = async () => {
-      const { data } = await supabase.from('categories').select('name').order('name');
+      const { data } = await supabase
+        .from('categories')
+        .select('name')
+        .order('name');
       if (data && mounted) {
         setCategories(data.map((c: any) => c.name));
       }
     };
     fetchCategories();
     return () => { mounted = false; };
-  }, []);
+  }, [user]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    const amount = parseCurrency(formData.amount);
+    const finalAmount = type === 'expense' ? -Math.abs(amount) : Math.abs(amount);
+
     onSave({
       id: editingTransaction?.id,
       description: formData.description,
       subtext: '',
       category: formData.category,
       status: 'Pago',
-      amount: -Math.abs(parseCurrency(formData.amount)),
+      amount: finalAmount,
       date: new Date(formData.date),
     });
     onClose();
   };
+
+  const title = type === 'expense' ? 'Despesa' : type === 'income' ? 'Receita' : 'Investimento';
 
   return (
     <AnimatePresence>
@@ -94,7 +111,7 @@ export function TransactionModal({ isOpen, onClose, onSave, editingTransaction }
             <div className="p-8">
               <div className="flex justify-between items-center mb-8">
                 <h3 className="text-2xl font-black font-headline text-primary tracking-tight">
-                  {editingTransaction ? 'Editar Despesa' : 'Nova Despesa'}
+                  {editingTransaction ? `Editar ${title}` : `Nova ${title}`}
                 </h3>
                 <button onClick={onClose} className="p-2 rounded-full hover:bg-surface-container-high transition-colors text-on-surface-variant">
                   <X size={24} />
@@ -163,7 +180,7 @@ export function TransactionModal({ isOpen, onClose, onSave, editingTransaction }
                     type="submit"
                     className="flex-1 py-4 rounded-2xl bg-primary text-on-primary font-bold shadow-lg shadow-primary/20 hover:scale-[0.98] transition-all"
                   >
-                    {editingTransaction ? 'Salvar Alterações' : 'Salvar Despesa'}
+                    {editingTransaction ? 'Salvar Alterações' : `Salvar ${title}`}
                   </button>
                 </div>
               </form>

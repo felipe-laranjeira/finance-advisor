@@ -9,12 +9,44 @@ interface StatsProps {
   total: number;
   currentMonthTotal: number;
   previousMonthTotal: number;
+  title?: string;
+  type?: 'expense' | 'income' | 'investment';
 }
 
-export function Stats({ total, currentMonthTotal, previousMonthTotal }: StatsProps) {
+export function Stats({ 
+  total, 
+  currentMonthTotal, 
+  previousMonthTotal, 
+  title = "Despesas Totais",
+  type = 'expense'
+}: StatsProps) {
   const diff = currentMonthTotal - previousMonthTotal;
-  const isSpendingMore = diff > 0;
+  const isHigher = diff > 0;
   const percentDiff = previousMonthTotal > 0 ? (Math.abs(diff) / previousMonthTotal) * 100 : 0;
+
+  const getComparisonText = () => {
+    if (type === 'expense') {
+      return isHigher ? 'Gastando MAIS' : 'Gastando MENOS';
+    } else if (type === 'income') {
+      return isHigher ? 'Ganhando MAIS' : 'Ganhando MENOS';
+    } else {
+      return isHigher ? 'Investindo MAIS' : 'Investindo MENOS';
+    }
+  };
+
+  const getGradient = () => {
+    if (type === 'expense') {
+      return isHigher 
+        ? "bg-gradient-to-br from-error to-error-container shadow-error/20" 
+        : "bg-gradient-to-br from-secondary to-secondary-container shadow-secondary/20";
+    } else if (type === 'income') {
+      return isHigher 
+        ? "bg-gradient-to-br from-secondary to-secondary-container shadow-secondary/20"
+        : "bg-gradient-to-br from-error to-error-container shadow-error/20";
+    } else {
+      return "bg-gradient-to-br from-primary to-primary-container shadow-primary/20";
+    }
+  };
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-12">
@@ -25,7 +57,7 @@ export function Stats({ total, currentMonthTotal, previousMonthTotal }: StatsPro
       >
         <div className="relative z-10">
           <div className="flex justify-between items-start mb-8">
-            <p className="text-sm font-medium opacity-80">Despesas Totais (Filtro Atual)</p>
+            <p className="text-sm font-medium opacity-80">{title} (Filtro Atual)</p>
             <TrendingDown size={24} className="opacity-60" />
           </div>
           <p className="text-5xl font-extrabold font-headline mb-6 tracking-tight">
@@ -33,7 +65,7 @@ export function Stats({ total, currentMonthTotal, previousMonthTotal }: StatsPro
           </p>
           <div className="flex items-center gap-2 text-sm">
             <span className="bg-white/20 px-3 py-1 rounded-full font-semibold backdrop-blur-sm">
-              Soma das despesas filtradas
+              Soma dos registros filtrados
             </span>
           </div>
         </div>
@@ -47,32 +79,30 @@ export function Stats({ total, currentMonthTotal, previousMonthTotal }: StatsPro
         transition={{ delay: 0.1 }}
         className={cn(
           "md:col-span-2 p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden transition-colors duration-500",
-          isSpendingMore 
-            ? "bg-gradient-to-br from-error to-error-container shadow-error/20" 
-            : "bg-gradient-to-br from-secondary to-secondary-container shadow-secondary/20"
+          getGradient()
         )}
       >
         <div className="relative z-10">
           <div className="flex justify-between items-start mb-8">
             <p className="text-sm font-medium opacity-80">Comparativo (Mês Atual vs Anterior)</p>
-            <TrendingDown size={24} className={cn("opacity-60", isSpendingMore && "rotate-180")} />
+            <TrendingDown size={24} className={cn("opacity-60", isHigher && "rotate-180")} />
           </div>
           <div className="flex items-baseline gap-3 mb-6">
             <p className="text-5xl font-extrabold font-headline tracking-tight">
               {formatCurrency(currentMonthTotal)}
             </p>
             <p className="text-xl font-bold opacity-90">
-              ({isSpendingMore ? '+' : '-'}{formatCurrency(Math.abs(diff))})
+              ({isHigher ? '+' : '-'}{formatCurrency(Math.abs(diff))})
             </p>
           </div>
           <div className="flex flex-col gap-2">
             <div className="flex items-center gap-2 text-sm">
               <span className="bg-white/20 px-3 py-1 rounded-full font-semibold backdrop-blur-sm">
-                {isSpendingMore ? 'Gastando MAIS' : 'Gastando MENOS'} que o mês passado
+                {getComparisonText()} que o mês passado
               </span>
             </div>
             <p className="text-xs opacity-70 font-medium">
-              {isSpendingMore ? '+' : '-'}{percentDiff.toFixed(1)}% em relação a {formatCurrency(previousMonthTotal)}
+              {isHigher ? '+' : '-'}{percentDiff.toFixed(1)}% em relação a {formatCurrency(previousMonthTotal)}
             </p>
           </div>
         </div>
