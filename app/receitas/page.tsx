@@ -258,12 +258,36 @@ export default function Page() {
         .update(payload)
         .eq('id', data.id)
         .eq('user_id', user.id);
-      if (error) console.error('Error updating:', error);
+      if (error) {
+        console.error('Error updating:', error);
+      } else if (catData?.id) {
+        // Save/Update category instruction for learning
+        await supabase
+          .from('transactions_category_instruction')
+          .upsert({
+            user_id: user.id,
+            description: data.description,
+            category_id: catData.id,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'user_id,description' });
+      }
     } else {
       const { error } = await supabase
         .from('transactions')
         .insert([payload]);
-      if (error) console.error('Error inserting:', error);
+      if (error) {
+        console.error('Error inserting:', error);
+      } else if (catData?.id) {
+        // Save category instruction for learning
+        await supabase
+          .from('transactions_category_instruction')
+          .upsert({
+            user_id: user.id,
+            description: data.description,
+            category_id: catData.id,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'user_id,description' });
+      }
     }
     fetchAvailableMonths();
     fetchTransactions();
@@ -313,6 +337,22 @@ export default function Page() {
 
       const ai = new GoogleGenAI({ apiKey });
       
+      // Fetch user's category instructions for learning
+      const { data: instructions } = await supabase
+        .from('transactions_category_instruction')
+        .select(`
+          description,
+          categories (
+            name
+          )
+        `)
+        .eq('user_id', user.id);
+
+      const instructionsText = instructions && instructions.length > 0 
+        ? `Use estas instruções de categorização personalizadas do usuário (prioridade máxima):
+           ${instructions.map((i: any) => `- Descrição: "${i.description}" -> Categoria: "${i.categories?.name}"`).join('\n')}`
+        : '';
+
       const currentCategories = categories.length > 0 ? categories : ['Salário', 'Freelance', 'Investimentos', 'Outros'];
       
       const prompt = `
@@ -337,9 +377,12 @@ export default function Page() {
         3. Valor (número positivo representando a receita)
         4. Categoria (tente mapear para uma destas: ${currentCategories.join(', ')}. Se não tiver certeza, use "Outros").
 
+        ${instructionsText}
+
         IMPORTANTE: 
         - Mapeie a categoria de forma inteligente.
         - Use apenas as categorias fornecidas na lista.
+        - Se a descrição for similar a alguma das instruções personalizadas acima, use a categoria indicada na instrução.
 
         Retorne APENAS um array JSON válido, sem formatação markdown, seguindo este esquema:
         [
