@@ -47,11 +47,61 @@ export default function DashboardPage() {
   const [expenseData, setExpenseData] = useState<any[]>([]);
   const [evolutionData, setEvolutionData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hasData, setHasData] = useState<boolean | null>(null);
 
   const years = useMemo(() => {
     const currentYear = new Date().getFullYear();
     return Array.from({ length: 5 }, (_, i) => currentYear - i);
   }, []);
+
+  // Set initial month based on most recent data
+  useEffect(() => {
+    const setInitialMonth = async () => {
+      if (!user) return;
+      
+      const [latestInc, latestExp] = await Promise.all([
+        supabase.from('incoming').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(1),
+        supabase.from('transactions').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(1)
+      ]);
+
+      const hasAnyData = (latestInc.data && latestInc.data.length > 0) || (latestExp.data && latestExp.data.length > 0);
+      setHasData(hasAnyData);
+
+      if (hasAnyData) {
+        let latestDate: Date | null = null;
+        if (latestInc.data?.[0]?.date) latestDate = new Date(latestInc.data[0].date);
+        if (latestExp.data?.[0]?.date) {
+          const expDate = new Date(latestExp.data[0].date);
+          // Use UTC to avoid timezone shifts
+          if (!latestDate || expDate > latestDate) latestDate = expDate;
+        }
+
+        if (latestDate) {
+          const now = new Date();
+          const currentMonth = now.getUTCMonth();
+          const currentYear = now.getUTCFullYear();
+          
+          // Check if current month has data (we'd need another query or just check if latestDate is current month)
+          // To be simple and follow the rule: if latest data is older than current month, use latest.
+          // If latest data is current month or newer, use current month.
+          
+          const latestMonth = latestDate.getUTCMonth();
+          const latestYear = latestDate.getUTCFullYear();
+
+          // If there's data for the current month or future, show current month
+          // Otherwise show the most recent month with data
+          if (latestYear > currentYear || (latestYear === currentYear && latestMonth >= currentMonth)) {
+            setSelectedMonth(currentMonth);
+            setSelectedYear(currentYear);
+          } else {
+            setSelectedMonth(latestMonth);
+            setSelectedYear(latestYear);
+          }
+        }
+      }
+    };
+    setInitialMonth();
+  }, [user]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -178,9 +228,23 @@ export default function DashboardPage() {
               </select>
             </div>
           </div>
+          
+          {hasData === false && !loading && (
+            <div className="flex flex-col items-center justify-center py-20 bg-surface-container-low rounded-[2.5rem] border border-dashed border-outline-variant/30">
+              <div className="w-20 h-20 bg-surface-container-high rounded-full flex items-center justify-center mb-6">
+                <DollarSign size={40} className="text-on-surface-variant/30" />
+              </div>
+              <h3 className="text-2xl font-black font-headline text-on-surface mb-2">Você ainda não possui lançamentos</h3>
+              <p className="text-on-surface-variant font-medium max-w-md text-center">
+                Comece adicionando suas receitas e despesas para visualizar seu painel financeiro completo.
+              </p>
+            </div>
+          )}
 
-          {/* Overspent Alert */}
-          {stats.isOverspent && (
+          {hasData !== false && (
+            <>
+              {/* Overspent Alert */}
+              {stats.isOverspent && (
             <motion.div 
               initial={{ opacity: 0, y: -20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -367,8 +431,10 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
-        </div>
-      </main>
+        </>
+      )}
     </div>
+  </main>
+</div>
   );
 }

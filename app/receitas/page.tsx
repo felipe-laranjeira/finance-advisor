@@ -68,9 +68,22 @@ export default function Page() {
         months.add(monthYear);
       });
 
-      setAvailableMonths(Array.from(months));
+      const monthsArray = Array.from(months);
+      setAvailableMonths(monthsArray);
+
+      // Default selection logic: current month if exists, otherwise most recent month
+      if (selectedMonthYear === 'Todos' && monthsArray.length > 0) {
+        const now = new Date();
+        const currentMonthYear = `${monthNames[now.getUTCMonth()]} ${now.getUTCFullYear()}`;
+        
+        if (months.has(currentMonthYear)) {
+          setSelectedMonthYear(currentMonthYear);
+        } else {
+          setSelectedMonthYear(monthsArray[0]);
+        }
+      }
     }
-  }, [user]);
+  }, [user, selectedMonthYear]);
 
   const fetchTransactions = useCallback(async () => {
     if (!user) return;
@@ -548,6 +561,14 @@ export default function Page() {
             <div className="flex flex-col items-center justify-center py-32 gap-4">
               <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
               <p className="text-on-surface-variant font-medium">Sincronizando seus registros...</p>
+            </div>
+          ) : totalCount === 0 && selectedMonthYear === 'Todos' && selectedCategory === 'Todas as Categorias' ? (
+            <div className="flex flex-col items-center justify-center py-32 gap-4 bg-surface-container-low rounded-[2.5rem] border border-dashed border-outline-variant/30">
+              <div className="w-20 h-20 bg-surface-container-high rounded-full flex items-center justify-center mb-2">
+                <Plus size={40} className="text-on-surface-variant/30" />
+              </div>
+              <h3 className="text-2xl font-black font-headline text-on-surface">Você ainda não possui lançamentos</h3>
+              <p className="text-on-surface-variant font-medium">Adicione sua primeira receita para começar.</p>
             </div>
           ) : (
             <>
