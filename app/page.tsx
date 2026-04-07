@@ -18,7 +18,7 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (user) {
-      router.push('/despesas');
+      router.push('/painel');
     }
   }, [user, router]);
 
@@ -36,7 +36,7 @@ export default function LoginPage() {
       setError(error.message === 'Invalid login credentials' ? 'Credenciais inválidas. Verifique seu e-mail e senha.' : error.message);
       setLoading(false);
     } else {
-      router.push('/despesas');
+      router.push('/painel');
     }
   };
 

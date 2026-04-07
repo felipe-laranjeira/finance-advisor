@@ -14,11 +14,12 @@ import {
 import { cn } from '@/lib/utils';
 import { motion } from 'motion/react';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import Link from 'next/link';
 
 const menuItems = [
-  { icon: LayoutDashboard, label: 'Painel', href: '#', active: false },
+  { icon: LayoutDashboard, label: 'Painel', href: '/painel', active: false },
   { icon: ArrowDownCircle, label: 'Receitas', href: '/receitas', active: false },
   { icon: Receipt, label: 'Despesas', href: '/despesas', active: false },
   { icon: BarChart3, label: 'Investimentos', href: '/investimentos', active: false },
@@ -27,7 +28,7 @@ const menuItems = [
 
 export function Sidebar() {
   const router = useRouter();
-  const currentPath = typeof window !== 'undefined' ? window.location.pathname : '';
+  const pathname = usePathname();
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -48,9 +49,9 @@ export function Sidebar() {
         {/* Navigation Links */}
         <nav className="flex-1 space-y-2">
           {menuItems.map((item) => {
-            const isActive = currentPath === item.href;
+            const isActive = pathname === item.href;
             return (
-              <a
+              <Link
                 key={item.label}
                 href={item.href}
                 className={cn(
@@ -62,7 +63,7 @@ export function Sidebar() {
               >
                 <item.icon size={20} className={isActive ? "text-primary fill-primary/10" : ""} />
                 <span>{item.label}</span>
-              </a>
+              </Link>
             );
           })}
         </nav>
