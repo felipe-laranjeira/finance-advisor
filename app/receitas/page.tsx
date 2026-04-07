@@ -6,7 +6,7 @@ import { TopBar } from '@/components/TopBar';
 import { Stats } from '@/components/Stats';
 import { TransactionTable } from '@/components/TransactionTable';
 import { TransactionModal } from '@/components/TransactionModal';
-import { Filter, Download, Calendar, Tag, Upload, Loader2, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Filter, Download, Calendar, Tag, Upload, Loader2, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -45,10 +45,9 @@ export default function Page() {
     if (!user) return;
 
     const { data, error } = await supabase
-      .from('transactions')
+      .from('incoming')
       .select('date')
       .eq('user_id', user.id)
-      .gt('amount', 0) // Only income
       .order('date', { ascending: false });
 
     if (error) {
@@ -88,8 +87,8 @@ export default function Page() {
     const endOfPrevious = new Date(currentYear, currentMonth, 0).toISOString().split('T')[0];
 
     const [currentRes, previousRes] = await Promise.all([
-      supabase.from('transactions').select('amount').eq('user_id', user.id).gt('amount', 0).gte('date', startOfCurrent).lte('date', endOfCurrent),
-      supabase.from('transactions').select('amount').eq('user_id', user.id).gt('amount', 0).gte('date', startOfPrevious).lte('date', endOfPrevious)
+      supabase.from('incoming').select('amount').eq('user_id', user.id).gte('date', startOfCurrent).lte('date', endOfCurrent),
+      supabase.from('incoming').select('amount').eq('user_id', user.id).gte('date', startOfPrevious).lte('date', endOfPrevious)
     ]);
 
     const currentTotal = currentRes.data?.reduce((acc, t) => acc + parseFloat(t.amount), 0) || 0;
@@ -99,7 +98,7 @@ export default function Page() {
 
     let selectString = `
       *,
-      categories (
+      incoming_categories (
         name
       )
     `;
@@ -107,20 +106,19 @@ export default function Page() {
     if (selectedCategory !== 'Todas as Categorias') {
       selectString = `
         *,
-        categories!inner (
+        incoming_categories!inner (
           name
         )
       `;
     }
 
     let query = supabase
-      .from('transactions')
+      .from('incoming')
       .select(selectString, { count: 'exact' })
-      .eq('user_id', user.id)
-      .gt('amount', 0); // Only income
+      .eq('user_id', user.id);
 
     if (selectedCategory !== 'Todas as Categorias') {
-      query = query.eq('categories.name', selectedCategory);
+      query = query.eq('incoming_categories.name', selectedCategory);
     }
 
     if (selectedMonthYear !== 'Todos') {
@@ -144,6 +142,7 @@ export default function Page() {
 
     if (error) {
       console.error('Error fetching transactions:', error);
+      alert('Erro ao carregar receitas: ' + error.message);
     } else {
       setTotalCount(count || 0);
       const formatted = data.map((t: any) => ({
@@ -151,7 +150,7 @@ export default function Page() {
         date: new Date(t.date),
         description: t.description,
         subtext: '',
-        category: t.categories?.name || 'Outros',
+        category: t.incoming_categories?.name || 'Outros',
         status: 'Recebido',
         amount: parseFloat(t.amount),
       }));
@@ -167,20 +166,21 @@ export default function Page() {
   useEffect(() => {
     let mounted = true;
     const load = async () => {
-      if (!user) return;
-      
       const { data: catData, error: catError } = await supabase
-        .from('categories')
+        .from('incoming_categories')
         .select('name')
         .order('name');
       
       if (mounted) {
         if (catError) {
           console.error('Error fetching categories:', catError);
+          setCategories(['Salário', 'Freelance', 'Dividendos', 'Aluguel', 'Investimentos', 'Outros']);
         } else if (catData) {
           setCategories(catData.map(c => c.name));
         }
-        await fetchAvailableMonths();
+        if (user) {
+          await fetchAvailableMonths();
+        }
       }
     };
     load();
@@ -206,55 +206,47 @@ export default function Page() {
   const handleSaveTransaction = async (data: any) => {
     if (!user) return;
 
-    const { data: catData } = await supabase
-      .from('categories')
+    // Find category ID
+    const { data: catData, error: catError } = await supabase
+      .from('incoming_categories')
       .select('id')
       .eq('name', data.category)
-      .single();
+      .maybeSingle();
+
+    if (catError) {
+      console.error('Error fetching category:', catError);
+    }
 
     const payload = {
       description: data.description,
       amount: Math.abs(data.amount), // Ensure positive for income
       date: data.date.toISOString().split('T')[0],
-      category_id: catData?.id,
-      user_id: user!.id,
+      category_id: catData?.id || null,
+      user_id: user.id,
     };
+
+    console.log('Attempting to save income:', payload);
 
     if (data.id) {
       const { error } = await supabase
-        .from('transactions')
+        .from('incoming')
         .update(payload)
         .eq('id', data.id)
-        .eq('user_id', user!.id);
+        .eq('user_id', user.id);
+      
       if (error) {
-        console.error('Error updating:', error);
-      } else if (catData?.id) {
-        // Save/Update category instruction for learning
-        await supabase
-          .from('transactions_category_instruction')
-          .upsert({
-            user_id: user!.id,
-            description: data.description,
-            category_id: catData.id,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'user_id,description' });
+        console.error('Error updating income:', error);
+        alert('Erro ao atualizar receita: ' + error.message);
       }
     } else {
       const { error } = await supabase
-        .from('transactions')
+        .from('incoming')
         .insert([payload]);
+      
       if (error) {
-        console.error('Error inserting:', error);
-      } else if (catData?.id) {
-        // Save category instruction for learning
-        await supabase
-          .from('transactions_category_instruction')
-          .upsert({
-            user_id: user!.id,
-            description: data.description,
-            category_id: catData.id,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'user_id,description' });
+        console.error('Error inserting income:', error);
+        console.error('Payload attempted:', payload);
+        alert('Erro ao inserir receita: ' + error.message + '\n\nDetalhes: ' + JSON.stringify(error));
       }
     }
     fetchAvailableMonths();
@@ -265,7 +257,7 @@ export default function Page() {
     if (!user) return;
 
     const { error } = await supabase
-      .from('transactions')
+      .from('incoming')
       .delete()
       .eq('id', id)
       .eq('user_id', user!.id);
@@ -307,10 +299,10 @@ export default function Page() {
       
       // Fetch user's category instructions for learning
       const { data: instructions } = await supabase
-        .from('transactions_category_instruction')
+        .from('incoming_category_instruction')
         .select(`
           description,
-          categories (
+          incoming_categories (
             name
           )
         `)
@@ -318,7 +310,7 @@ export default function Page() {
 
       const instructionsText = instructions && instructions.length > 0 
         ? `Use estas instruções de categorização personalizadas do usuário (prioridade máxima):
-           ${instructions.map((i: any) => `- Descrição: "${i.description}" -> Categoria: "${i.categories?.name}"`).join('\n')}`
+           ${instructions.map((i: any) => `- Descrição: "${i.description}" -> Categoria: "${i.incoming_categories?.name}"`).join('\n')}`
         : '';
 
       const currentCategories = categories.length > 0 ? categories : ['Salário', 'Freelance', 'Investimentos', 'Outros'];
@@ -344,6 +336,7 @@ export default function Page() {
         2. Descrição (nome da fonte pagadora ou serviço)
         3. Valor (número positivo representando a receita)
         4. Categoria (tente mapear para uma destas: ${currentCategories.join(', ')}. Se não tiver certeza, use "Outros").
+        5. Tipo (mapeie como "ativa" para salários/serviços ou "passiva" para dividendos/aluguéis/investimentos).
 
         ${instructionsText}
 
@@ -354,7 +347,7 @@ export default function Page() {
 
         Retorne APENAS um array JSON válido, sem formatação markdown, seguindo este esquema:
         [
-          { "date": "2024-03-26", "description": "Salário", "amount": 5000.00, "category": "Salário" }
+          { "date": "2024-03-26", "description": "Salário", "amount": 5000.00, "category": "Salário", "type": "ativa" }
         ]
         Se não encontrar receitas, retorne um array vazio [].
       `;
@@ -386,9 +379,10 @@ export default function Page() {
                 date: { type: Type.STRING },
                 description: { type: Type.STRING },
                 amount: { type: Type.NUMBER },
-                category: { type: Type.STRING }
+                category: { type: Type.STRING },
+                type: { type: Type.STRING }
               },
-              required: ["date", "description", "amount", "category"]
+              required: ["date", "description", "amount", "category", "type"]
             }
           }
         }
@@ -397,7 +391,7 @@ export default function Page() {
       const extractedData = JSON.parse(response.text || "[]");
       
       if (extractedData.length > 0) {
-        const { data: catData } = await supabase.from('categories').select('id, name');
+        const { data: catData } = await supabase.from('incoming_categories').select('id, name');
         const categoryMap = new Map(catData?.map(c => [c.name.toLowerCase().trim(), c.id]));
         const defaultCategoryId = categoryMap.get('outros');
 
@@ -409,10 +403,11 @@ export default function Page() {
             date: item.date,
             category_id: categoryMap.get(categoryName) || defaultCategoryId,
             user_id: user!.id,
+            type: item.type === 'passiva' ? 'passiva' : 'ativa',
           };
         });
 
-        const { error } = await supabase.from('transactions').insert(transactionsToInsert);
+        const { error } = await supabase.from('incoming').insert(transactionsToInsert);
         if (error) throw error;
 
         alert(`${extractedData.length} receitas importadas com sucesso!`);
@@ -468,6 +463,16 @@ export default function Page() {
             </div>
             
             <div className="flex items-center gap-4">
+              <button 
+                onClick={() => {
+                  setEditingTransaction(null);
+                  setIsModalOpen(true);
+                }}
+                className="px-8 py-3.5 rounded-2xl bg-primary text-on-primary font-bold flex items-center gap-2.5 shadow-lg shadow-primary/20 hover:opacity-90 transition-all"
+              >
+                <Plus size={20} />
+                Adicionar Receita
+              </button>
               <button className="px-8 py-3.5 rounded-2xl bg-surface-container-lowest text-on-surface font-bold flex items-center gap-2.5 border border-outline-variant/10 hover:bg-surface-container-low transition-all shadow-sm">
                 <Filter size={18} />
                 Filtros

@@ -7,7 +7,7 @@ import { Stats } from '@/components/Stats';
 import { TransactionTable } from '@/components/TransactionTable';
 import { InsightCard } from '@/components/InsightCard';
 import { TransactionModal } from '@/components/TransactionModal';
-import { Filter, Download, Calendar, Tag, Upload, Loader2, Sparkles, Receipt, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Filter, Download, Calendar, Tag, Upload, Loader2, Sparkles, Receipt, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { GoogleGenAI, Type } from "@google/genai";
@@ -661,6 +661,16 @@ Responda de forma direta, profissional e empática, em português do Brasil. Use
             </div>
             
             <div className="flex items-center gap-4">
+              <button 
+                onClick={() => {
+                  setEditingTransaction(null);
+                  setIsModalOpen(true);
+                }}
+                className="px-8 py-3.5 rounded-2xl bg-primary text-on-primary font-bold flex items-center gap-2.5 shadow-lg shadow-primary/20 hover:opacity-90 transition-all"
+              >
+                <Plus size={20} />
+                Adicionar Despesa
+              </button>
               <div className="flex bg-surface-container-high p-1.5 rounded-2xl shadow-inner">
                 <button 
                   onClick={() => setActiveTab('table')}

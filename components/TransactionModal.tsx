@@ -60,17 +60,30 @@ export function TransactionModal({ isOpen, onClose, onSave, editingTransaction, 
   useEffect(() => {
     let mounted = true;
     const fetchCategories = async () => {
-      const { data } = await supabase
-        .from('categories')
+      const categoryTable = type === 'income' ? 'incoming_categories' : 'categories';
+      const { data, error } = await supabase
+        .from(categoryTable)
         .select('name')
         .order('name');
+      
+      if (error) {
+        console.error(`Error fetching ${categoryTable}:`, error);
+        if (mounted) {
+          const fallbacks = type === 'income' 
+            ? ['Salário', 'Freelance', 'Dividendos', 'Aluguel', 'Investimentos', 'Outros']
+            : ['Alimentação', 'Transporte', 'Saúde', 'Educação', 'Lazer', 'Moradia', 'Outros'];
+          setCategories(fallbacks);
+        }
+        return;
+      }
+
       if (data && mounted) {
         setCategories(data.map((c: any) => c.name));
       }
     };
     fetchCategories();
     return () => { mounted = false; };
-  }, [user]);
+  }, [type]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,7 +98,7 @@ export function TransactionModal({ isOpen, onClose, onSave, editingTransaction, 
       status: 'Pago',
       amount: finalAmount,
       date: new Date(formData.date),
-    });
+    } as any);
     onClose();
   };
 
@@ -155,17 +168,19 @@ export function TransactionModal({ isOpen, onClose, onSave, editingTransaction, 
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-xs font-black uppercase tracking-widest text-on-surface-variant ml-1">Categoria</label>
-                  <select
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                    className="w-full px-6 py-4 bg-surface-container-high border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-bold"
-                  >
-                    {categories.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
+                <div className="grid grid-cols-1 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-xs font-black uppercase tracking-widest text-on-surface-variant ml-1">Categoria</label>
+                    <select
+                      value={formData.category}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                      className="w-full px-6 py-4 bg-surface-container-high border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-bold"
+                    >
+                      {categories.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
                 <div className="pt-4 flex gap-4">

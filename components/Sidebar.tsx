@@ -67,17 +67,6 @@ export function Sidebar() {
           })}
         </nav>
 
-        {/* CTA */}
-        <motion.button 
-          whileHover={{ scale: 0.98 }}
-          whileTap={{ scale: 0.95 }}
-          onClick={() => (window as any).openTransactionModal?.()}
-          className="mt-4 mb-8 py-3.5 px-4 rounded-2xl bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold flex items-center justify-center gap-2 shadow-lg shadow-primary/20"
-        >
-          <Plus size={20} />
-          <span>Adicionar Despesa</span>
-        </motion.button>
-
         {/* Footer Links */}
         <div className="pt-6 border-t border-outline-variant/20 space-y-1">
           <a className="text-on-surface-variant flex items-center gap-3 px-4 py-2.5 hover:bg-surface-container-highest transition-all duration-200 rounded-xl text-sm" href="#">

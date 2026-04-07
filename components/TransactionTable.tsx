@@ -51,6 +51,7 @@ export function TransactionTable({ transactions, onDelete, onEdit }: Transaction
                 <td className="px-10 py-6 text-sm font-semibold text-on-surface-variant">{formatDate(t.date)}</td>
                 <td className="px-10 py-6">
                   <div className="font-bold text-on-surface text-base">{t.description}</div>
+                  {t.subtext && <div className="text-xs text-on-surface-variant font-medium mt-0.5">{t.subtext}</div>}
                 </td>
                 <td className="px-10 py-6">
                   <span className={cn(

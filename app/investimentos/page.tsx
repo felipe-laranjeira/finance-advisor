@@ -43,34 +43,45 @@ export default function Page() {
 
   const fetchAvailableMonths = useCallback(async () => {
     if (!user) return;
+    
+    // Fetch from both tables
+    const [transRes, incomingRes] = await Promise.all([
+      supabase
+        .from('transactions')
+        .select('date, categories!category_id!inner(name)')
+        .eq('user_id', user.id)
+        .eq('categories.name', 'Investimentos'),
+      supabase
+        .from('incoming')
+        .select('date, incoming_categories!category_id!inner(name)')
+        .eq('user_id', user.id)
+        .eq('incoming_categories.name', 'Investimentos')
+    ]);
 
-    const { data, error } = await supabase
-      .from('transactions')
-      .select('date')
-      .eq('user_id', user.id)
-      .eq('type', 'investment') // Filter by type if we had it, but for now we use amount > 0 and specific categories or just amount > 0
-      .order('date', { ascending: false });
+    const months = new Set<string>();
+    const monthNames = [
+      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
 
-    if (error) {
-      console.error('Error fetching months:', error);
-      return;
-    }
-
-    if (data) {
-      const months = new Set<string>();
-      const monthNames = [
-        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-      ];
-
+    const processData = (data: any[]) => {
       data.forEach((t: any) => {
         const date = new Date(t.date);
         const monthYear = `${monthNames[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
         months.add(monthYear);
       });
+    };
 
-      setAvailableMonths(Array.from(months));
-    }
+    if (transRes.data) processData(transRes.data);
+    if (incomingRes.data) processData(incomingRes.data);
+
+    setAvailableMonths(Array.from(months).sort((a, b) => {
+      const [mA, yA] = a.split(' ');
+      const [mB, yB] = b.split(' ');
+      const dateA = new Date(parseInt(yA), monthNames.indexOf(mA));
+      const dateB = new Date(parseInt(yB), monthNames.indexOf(mB));
+      return dateB.getTime() - dateA.getTime();
+    }));
   }, [user]);
 
   const fetchTransactions = useCallback(async () => {
@@ -87,29 +98,43 @@ export default function Page() {
     const startOfPrevious = new Date(currentYear, currentMonth - 1, 1).toISOString().split('T')[0];
     const endOfPrevious = new Date(currentYear, currentMonth, 0).toISOString().split('T')[0];
 
-    // For now, we assume investments are positive transactions in the 'Investimentos' category
-    // In a real app, we'd have a 'type' column. Let's assume we filter by category 'Investimentos' for now.
-    
-    const [currentRes, previousRes] = await Promise.all([
-      supabase.from('transactions').select('amount, categories!inner(name)').eq('user_id', user.id).eq('categories.name', 'Investimentos').gte('date', startOfCurrent).lte('date', endOfCurrent),
-      supabase.from('transactions').select('amount, categories!inner(name)').eq('user_id', user.id).eq('categories.name', 'Investimentos').gte('date', startOfPrevious).lte('date', endOfPrevious)
+    // For now, we assume investments are transactions in the 'Investimentos' category in both tables
+    const [currentTrans, currentIncoming, previousTrans, previousIncoming] = await Promise.all([
+      supabase.from('transactions').select('amount, categories!category_id!inner(name)').eq('user_id', user.id).eq('categories.name', 'Investimentos').gte('date', startOfCurrent).lte('date', endOfCurrent),
+      supabase.from('incoming').select('amount, incoming_categories!category_id!inner(name)').eq('user_id', user.id).eq('incoming_categories.name', 'Investimentos').gte('date', startOfCurrent).lte('date', endOfCurrent),
+      supabase.from('transactions').select('amount, categories!category_id!inner(name)').eq('user_id', user.id).eq('categories.name', 'Investimentos').gte('date', startOfPrevious).lte('date', endOfPrevious),
+      supabase.from('incoming').select('amount, incoming_categories!category_id!inner(name)').eq('user_id', user.id).eq('incoming_categories.name', 'Investimentos').gte('date', startOfPrevious).lte('date', endOfPrevious)
     ]);
 
-    const currentTotal = currentRes.data?.reduce((acc, t) => acc + parseFloat(t.amount), 0) || 0;
-    const previousTotal = previousRes.data?.reduce((acc, t) => acc + parseFloat(t.amount), 0) || 0;
+    const sum = (data: any[]) => data?.reduce((acc, t) => acc + parseFloat(t.amount), 0) || 0;
+    
+    const currentTotal = sum(currentTrans.data || []) + sum(currentIncoming.data || []);
+    const previousTotal = sum(previousTrans.data || []) + sum(previousIncoming.data || []);
     
     setComparisonStats({ current: currentTotal, previous: previousTotal });
 
-    let query = supabase
+    // Fetch transactions from both tables for the list
+    let transQuery = supabase
       .from('transactions')
       .select(`
         *,
-        categories!inner (
+        categories!category_id!inner (
           name
         )
       `, { count: 'exact' })
       .eq('user_id', user.id)
       .eq('categories.name', 'Investimentos');
+
+    let incomingQuery = supabase
+      .from('incoming')
+      .select(`
+        *,
+        incoming_categories!category_id!inner (
+          name
+        )
+      `, { count: 'exact' })
+      .eq('user_id', user.id)
+      .eq('incoming_categories.name', 'Investimentos');
 
     if (selectedMonthYear !== 'Todos') {
       const [monthName, year] = selectedMonthYear.split(' ');
@@ -119,30 +144,46 @@ export default function Page() {
       };
       const month = monthMap[monthName];
       if (month !== undefined) {
-        const startDate = new Date(parseInt(year), month, 1);
-        const endDate = new Date(parseInt(year), month + 1, 0);
-        query = query.gte('date', startDate.toISOString().split('T')[0])
-                     .lte('date', endDate.toISOString().split('T')[0]);
+        const startDate = new Date(parseInt(year), month, 1).toISOString().split('T')[0];
+        const endDate = new Date(parseInt(year), month + 1, 0).toISOString().split('T')[0];
+        transQuery = transQuery.gte('date', startDate).lte('date', endDate);
+        incomingQuery = incomingQuery.gte('date', startDate).lte('date', endDate);
       }
     }
 
-    const { data, error, count } = await query
-      .order('date', { ascending: false })
-      .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
+    const [transRes, incomingRes] = await Promise.all([
+      transQuery.order('date', { ascending: false }),
+      incomingQuery.order('date', { ascending: false })
+    ]);
 
-    if (error) {
-      console.error('Error fetching transactions:', error);
+    if (transRes.error || incomingRes.error) {
+      console.error('Error fetching transactions:', transRes.error || incomingRes.error);
     } else {
-      setTotalCount(count || 0);
-      const formatted = data.map((t: any) => ({
-        id: t.id,
-        date: new Date(t.date),
-        description: t.description,
-        subtext: '',
-        category: t.categories?.name || 'Investimentos',
-        status: 'Aplicado',
-        amount: parseFloat(t.amount),
-      }));
+      const combined = [
+        ...(transRes.data || []).map(t => {
+          const cat = t.categories;
+          const catName = (Array.isArray(cat) ? cat[0]?.name : cat?.name) || 'Investimentos';
+          return { ...t, category: catName };
+        }),
+        ...(incomingRes.data || []).map(t => {
+          const cat = t.incoming_categories;
+          const catName = (Array.isArray(cat) ? cat[0]?.name : cat?.name) || 'Investimentos';
+          return { ...t, category: catName };
+        })
+      ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      setTotalCount(combined.length);
+      const formatted = combined
+        .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+        .map((t: any) => ({
+          id: t.id,
+          date: new Date(t.date),
+          description: t.description,
+          subtext: '',
+          category: t.category,
+          status: 'Aplicado',
+          amount: parseFloat(t.amount),
+        }));
       setTransactions(formatted);
     }
     setLoading(false);
@@ -438,6 +479,14 @@ export default function Page() {
             </div>
             
             <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setIsModalOpen(true)}
+                className="px-8 py-3.5 rounded-2xl bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold flex items-center gap-2.5 shadow-lg shadow-primary/20 hover:opacity-90 transition-all active:scale-95"
+              >
+                <TrendingUp size={20} />
+                Novo Investimento
+              </button>
+              
               <button className="px-8 py-3.5 rounded-2xl bg-surface-container-lowest text-on-surface font-bold flex items-center gap-2.5 border border-outline-variant/10 hover:bg-surface-container-low transition-all shadow-sm">
                 <Filter size={18} />
                 Filtros
