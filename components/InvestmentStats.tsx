@@ -47,7 +47,7 @@ export function InvestmentStats({ total, categoryTotals }: InvestmentStatsProps)
       >
         <div className="relative z-10 h-full flex flex-col">
           <div className="flex justify-between items-start mb-6">
-            <p className="text-sm font-bold text-on-surface-variant uppercase tracking-widest">Distribuição por Categoria</p>
+            <p className="text-sm font-bold text-primary uppercase tracking-widest">Distribuição por Categoria</p>
             <PieChart size={20} className="text-primary opacity-60" />
           </div>
           
@@ -55,15 +55,15 @@ export function InvestmentStats({ total, categoryTotals }: InvestmentStatsProps)
             {categories.length > 0 ? (
               categories.map(([category, amount]) => (
                 <div key={category} className="flex flex-col">
-                  <span className="text-[10px] font-black uppercase tracking-wider text-on-surface-variant/60 mb-0.5">{category}</span>
-                  <span className="text-lg font-black text-on-surface font-headline leading-none">
+                  <span className="text-[10px] font-black uppercase tracking-wider text-primary/60 mb-0.5">{category}</span>
+                  <span className="text-lg font-black text-primary font-headline leading-none">
                     {formatCurrency(amount)}
                   </span>
                 </div>
               ))
             ) : (
               <div className="col-span-2 flex items-center justify-center h-full">
-                <p className="text-on-surface-variant text-sm font-medium italic">Nenhum dado disponível</p>
+                <p className="text-primary/70 text-sm font-medium italic">Nenhum dado disponível</p>
               </div>
             )}
           </div>
