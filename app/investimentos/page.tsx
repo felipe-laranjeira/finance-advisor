@@ -3,77 +3,69 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
-import { Stats } from '@/components/Stats';
-import { TransactionTable } from '@/components/TransactionTable';
-import { TransactionModal } from '@/components/TransactionModal';
-import { Filter, Download, Calendar, Tag, Upload, Loader2, ChevronLeft, ChevronRight, TrendingUp } from 'lucide-react';
+import { InvestmentStats } from '@/components/InvestmentStats';
+import { InvestmentTable } from '@/components/InvestmentTable';
+import { InvestmentModal } from '@/components/InvestmentModal';
+import { Filter, Download, Calendar, Upload, Loader2, ChevronLeft, ChevronRight, TrendingUp, DollarSign } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
 import { GoogleGenAI, Type } from "@google/genai";
 import { cn, formatCurrency } from '@/lib/utils';
-
-interface Transaction {
-  id: string;
-  date: Date;
-  description: string;
-  subtext: string;
-  category: string;
-  status: string;
-  amount: number;
-}
-
 import { useAuth } from '@/components/AuthProvider';
 
-export default function Page() {
+interface Investment {
+  id: string;
+  asset_name: string;
+  broker: string;
+  asset_type: string;
+  balance: number;
+  reference_date: string;
+}
+
+export default function InvestmentsPage() {
   const { user, loading: authLoading } = useAuth();
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [investments, setInvestments] = useState<Investment[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
+  const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null);
   const [loading, setLoading] = useState(true);
-  const [categories, setCategories] = useState<string[]>([]);
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string>('Todas as Categorias');
   const [selectedMonthYear, setSelectedMonthYear] = useState<string>('Todos');
   const [isImporting, setIsImporting] = useState(false);
-  const [comparisonStats, setComparisonStats] = useState({ current: 0, previous: 0 });
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [totalCount, setTotalCount] = useState(0);
-  const router = useRouter();
+
+  const monthNames = useMemo(() => [
+    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+  ], []);
+
+  const categoryTotals = useMemo(() => {
+    const totals: Record<string, number> = {};
+    investments.forEach(inv => {
+      totals[inv.asset_type] = (totals[inv.asset_type] || 0) + inv.balance;
+    });
+    return totals;
+  }, [investments]);
 
   const fetchAvailableMonths = useCallback(async () => {
     if (!user) return;
     
-    // Fetch from both tables
-    const [transRes, incomingRes] = await Promise.all([
-      supabase
-        .from('transactions')
-        .select('date, categories!category_id!inner(name)')
-        .eq('user_id', user.id)
-        .eq('categories.name', 'Investimentos'),
-      supabase
-        .from('incoming')
-        .select('date, incoming_categories!category_id!inner(name)')
-        .eq('user_id', user.id)
-        .eq('incoming_categories.name', 'Investimentos')
-    ]);
+    const { data, error } = await supabase
+      .from('investments')
+      .select('reference_date')
+      .eq('user_id', user.id);
+
+    if (error) {
+      console.error('Error fetching months:', error);
+      return;
+    }
 
     const months = new Set<string>();
-    const monthNames = [
-      'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-      'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-    ];
-
-    const processData = (data: any[]) => {
-      data.forEach((t: any) => {
-        const date = new Date(t.date);
-        const monthYear = `${monthNames[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
-        months.add(monthYear);
-      });
-    };
-
-    if (transRes.data) processData(transRes.data);
-    if (incomingRes.data) processData(incomingRes.data);
+    data?.forEach((item: any) => {
+      const date = new Date(item.reference_date);
+      const monthYear = `${monthNames[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+      months.add(monthYear);
+    });
 
     setAvailableMonths(Array.from(months).sort((a, b) => {
       const [mA, yA] = a.split(' ');
@@ -82,221 +74,81 @@ export default function Page() {
       const dateB = new Date(parseInt(yB), monthNames.indexOf(mB));
       return dateB.getTime() - dateA.getTime();
     }));
-  }, [user]);
+  }, [user, monthNames]);
 
-  const fetchTransactions = useCallback(async () => {
+  const fetchInvestments = useCallback(async () => {
     if (!user) return;
     setLoading(true);
     
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-    
-    const startOfCurrent = new Date(currentYear, currentMonth, 1).toISOString().split('T')[0];
-    const endOfCurrent = new Date(currentYear, currentMonth + 1, 0).toISOString().split('T')[0];
-    
-    const startOfPrevious = new Date(currentYear, currentMonth - 1, 1).toISOString().split('T')[0];
-    const endOfPrevious = new Date(currentYear, currentMonth, 0).toISOString().split('T')[0];
-
-    // For now, we assume investments are transactions in the 'Investimentos' category in both tables
-    const [currentTrans, currentIncoming, previousTrans, previousIncoming] = await Promise.all([
-      supabase.from('transactions').select('amount, categories!category_id!inner(name)').eq('user_id', user.id).eq('categories.name', 'Investimentos').gte('date', startOfCurrent).lte('date', endOfCurrent),
-      supabase.from('incoming').select('amount, incoming_categories!category_id!inner(name)').eq('user_id', user.id).eq('incoming_categories.name', 'Investimentos').gte('date', startOfCurrent).lte('date', endOfCurrent),
-      supabase.from('transactions').select('amount, categories!category_id!inner(name)').eq('user_id', user.id).eq('categories.name', 'Investimentos').gte('date', startOfPrevious).lte('date', endOfPrevious),
-      supabase.from('incoming').select('amount, incoming_categories!category_id!inner(name)').eq('user_id', user.id).eq('incoming_categories.name', 'Investimentos').gte('date', startOfPrevious).lte('date', endOfPrevious)
-    ]);
-
-    const sum = (data: any[]) => data?.reduce((acc, t) => acc + parseFloat(t.amount), 0) || 0;
-    
-    const currentTotal = sum(currentTrans.data || []) + sum(currentIncoming.data || []);
-    const previousTotal = sum(previousTrans.data || []) + sum(previousIncoming.data || []);
-    
-    setComparisonStats({ current: currentTotal, previous: previousTotal });
-
-    // Fetch transactions from both tables for the list
-    let transQuery = supabase
-      .from('transactions')
-      .select(`
-        *,
-        categories!category_id!inner (
-          name
-        )
-      `, { count: 'exact' })
-      .eq('user_id', user.id)
-      .eq('categories.name', 'Investimentos');
-
-    let incomingQuery = supabase
-      .from('incoming')
-      .select(`
-        *,
-        incoming_categories!category_id!inner (
-          name
-        )
-      `, { count: 'exact' })
-      .eq('user_id', user.id)
-      .eq('incoming_categories.name', 'Investimentos');
+    // Main query
+    let query = supabase
+      .from('investments')
+      .select('*', { count: 'exact' })
+      .eq('user_id', user.id);
 
     if (selectedMonthYear !== 'Todos') {
       const [monthName, year] = selectedMonthYear.split(' ');
-      const monthMap: { [key: string]: number } = {
-        'Janeiro': 0, 'Fevereiro': 1, 'Março': 2, 'Abril': 3, 'Maio': 4, 'Junho': 5,
-        'Julho': 6, 'Agosto': 7, 'Setembro': 8, 'Outubro': 9, 'Novembro': 10, 'Dezembro': 11
-      };
-      const month = monthMap[monthName];
-      if (month !== undefined) {
-        const startDate = new Date(parseInt(year), month, 1).toISOString().split('T')[0];
-        const endDate = new Date(parseInt(year), month + 1, 0).toISOString().split('T')[0];
-        transQuery = transQuery.gte('date', startDate).lte('date', endDate);
-        incomingQuery = incomingQuery.gte('date', startDate).lte('date', endDate);
+      const month = monthNames.indexOf(monthName);
+      if (month !== -1) {
+        const refDate = new Date(parseInt(year), month, 1).toISOString().split('T')[0];
+        query = query.eq('reference_date', refDate);
       }
     }
 
-    const [transRes, incomingRes] = await Promise.all([
-      transQuery.order('date', { ascending: false }),
-      incomingQuery.order('date', { ascending: false })
-    ]);
+    const { data, count, error } = await query
+      .order('reference_date', { ascending: false })
+      .order('asset_name', { ascending: true })
+      .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
 
-    if (transRes.error || incomingRes.error) {
-      console.error('Error fetching transactions:', transRes.error || incomingRes.error);
+    if (error) {
+      console.error('Error fetching investments:', error);
     } else {
-      const combined = [
-        ...(transRes.data || []).map(t => {
-          const cat = t.categories;
-          const catName = (Array.isArray(cat) ? cat[0]?.name : cat?.name) || 'Investimentos';
-          return { ...t, category: catName };
-        }),
-        ...(incomingRes.data || []).map(t => {
-          const cat = t.incoming_categories;
-          const catName = (Array.isArray(cat) ? cat[0]?.name : cat?.name) || 'Investimentos';
-          return { ...t, category: catName };
-        })
-      ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-      setTotalCount(combined.length);
-      const formatted = combined
-        .slice((currentPage - 1) * pageSize, currentPage * pageSize)
-        .map((t: any) => ({
-          id: t.id,
-          date: new Date(t.date),
-          description: t.description,
-          subtext: '',
-          category: t.category,
-          status: 'Aplicado',
-          amount: parseFloat(t.amount),
-        }));
-      setTransactions(formatted);
+      setInvestments(data || []);
+      setTotalCount(count || 0);
     }
     setLoading(false);
-  }, [user, selectedMonthYear, currentPage, pageSize]);
+  }, [user, selectedMonthYear, currentPage, pageSize, monthNames]);
 
   useEffect(() => {
-    setCurrentPage(1);
-  }, [selectedMonthYear]);
+    fetchAvailableMonths();
+    fetchInvestments();
+  }, [fetchAvailableMonths, fetchInvestments]);
 
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      if (!user) return;
-      await fetchAvailableMonths();
-    };
-    load();
-    return () => { mounted = false; };
-  }, [fetchAvailableMonths, user]);
-
-  useEffect(() => {
-    let mounted = true;
-    const load = async () => {
-      if (mounted) {
-        await fetchTransactions();
-      }
-    };
-    load();
-    return () => { mounted = false; };
-  }, [selectedMonthYear, fetchTransactions]);
-
-  const totals = useMemo(() => {
-    const total = transactions.reduce((acc, t) => acc + t.amount, 0);
-    return { total };
-  }, [transactions]);
-
-  const handleSaveTransaction = async (data: any) => {
+  const handleSaveInvestment = async (data: any) => {
     if (!user) return;
-
-    const { data: catData } = await supabase
-      .from('categories')
-      .select('id')
-      .eq('name', 'Investimentos')
-      .single();
 
     const payload = {
-      description: data.description,
-      amount: Math.abs(data.amount),
-      date: data.date.toISOString().split('T')[0],
-      category_id: catData?.id,
-      user_id: user!.id,
+      user_id: user.id,
+      asset_name: data.asset_name,
+      broker: data.broker,
+      asset_type: data.asset_type,
+      balance: data.balance,
+      reference_date: data.reference_date,
+      updated_at: new Date().toISOString()
     };
 
-    if (data.id) {
-      const { error } = await supabase
-        .from('transactions')
-        .update(payload)
-        .eq('id', data.id)
-        .eq('user_id', user!.id);
-      if (error) {
-        console.error('Error updating:', error);
-      } else if (catData?.id) {
-        // Save/Update category instruction for learning
-        await supabase
-          .from('transactions_category_instruction')
-          .upsert({
-            user_id: user!.id,
-            description: data.description,
-            category_id: catData.id,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'user_id,description' });
-      }
+    // UPSERT logic as requested: user_id, asset_name, broker, reference_date are unique
+    const { error } = await supabase
+      .from('investments')
+      .upsert(payload, { onConflict: 'user_id,asset_name,broker,reference_date' });
+
+    if (error) {
+      console.error('Error saving investment:', error);
+      alert('Erro ao salvar investimento.');
     } else {
-      const { error } = await supabase
-        .from('transactions')
-        .insert([payload]);
-      if (error) {
-        console.error('Error inserting:', error);
-      } else if (catData?.id) {
-        // Save category instruction for learning
-        await supabase
-          .from('transactions_category_instruction')
-          .upsert({
-            user_id: user!.id,
-            description: data.description,
-            category_id: catData.id,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'user_id,description' });
-      }
+      fetchAvailableMonths();
+      fetchInvestments();
     }
-    fetchAvailableMonths();
-    fetchTransactions();
   };
 
-  const handleDeleteTransaction = async (id: string) => {
+  const handleDeleteInvestment = async (id: string) => {
     if (!user) return;
-
-    const { error } = await supabase
-      .from('transactions')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', user!.id);
-    
+    const { error } = await supabase.from('investments').delete().eq('id', id).eq('user_id', user.id);
     if (error) {
       console.error('Error deleting:', error);
     } else {
-      setTransactions(prev => prev.filter(t => t.id !== id));
-      fetchAvailableMonths();
+      fetchInvestments();
     }
-  };
-
-  const handleEditTransaction = (transaction: Transaction) => {
-    setEditingTransaction(transaction);
-    setIsModalOpen(true);
   };
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -307,88 +159,37 @@ export default function Page() {
     try {
       const reader = new FileReader();
       const fileData = await new Promise<string>((resolve) => {
-        reader.onload = () => {
-          const base64 = (reader.result as string).split(',')[1];
-          resolve(base64);
-        };
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
         reader.readAsDataURL(file);
       });
 
       const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error("Configuração ausente: NEXT_PUBLIC_GEMINI_API_KEY não encontrada.");
-      }
+      if (!apiKey) throw new Error("API Key ausente.");
 
       const ai = new GoogleGenAI({ apiKey });
-      
-      // Fetch user's category instructions for learning
-      const { data: instructions } = await supabase
-        .from('transactions_category_instruction')
-        .select(`
-          description,
-          categories (
-            name
-          )
-        `)
-        .eq('user_id', user!.id);
-
-      const instructionsText = instructions && instructions.length > 0 
-        ? `Use estas instruções de categorização personalizadas do usuário (prioridade máxima):
-           ${instructions.map((i: any) => `- Descrição: "${i.description}" -> Categoria: "${i.categories?.name}"`).join('\n')}`
-        : '';
-
       const prompt = `
         ### ROLE
-        Você é o "Security-First Financial Engine". Sua única função é processar e analisar dados financeiros estritamente vinculados ao contexto do usuário autenticado fornecido na requisição.
-
-        ### PROTOCOLO DE SEGURANÇA (ISOLAMENTO)
-        1. CONTEXTO ÚNICO: Todas as operações de leitura, soma e análise devem ser feitas EXCLUSIVAMENTE sobre o objeto de dados que contenha o ID do usuário correspondente ao cabeçalho de contexto.
-        2. PROIBIÇÃO DE ALUCINAÇÃO: Se o usuário perguntar sobre transações ou saldos que não constam no JSON enviado, responda: "Não localizei registros para este critério no seu histórico seguro."
-        3. ZERO CROSS-DATA: Um usuário não pode acessar os dados de outro usuário. 
-
-        ### REGRAS DE EXECUÇÃO
-        - Valide internamente se o \`user_id\` dentro de cada transação no \`data_payload\` coincide com o \`user_id\` do \`auth_context\`. 
-        - Caso detecte divergência de IDs (tentativa de bypass), interrompa o processamento e emita um alerta de "Erro de Leitura de Dados".
-        - Apresente os dados de forma organizada, sempre confirmando para quem a análise está sendo gerada (ex: "Análise gerada para o Usuário [ID_REDUZIDO]").
+        Você é o "Wealth Management Architect". Analise este extrato de corretora e extraia os saldos dos ativos.
 
         ### TAREFA
-        Analise este extrato de investimentos (imagem ou PDF) e identifique todos os aportes ou aplicações.
-        Para cada investimento encontrado, extraia:
-        1. Data (no formato YYYY-MM-DD)
-        2. Descrição (nome do ativo, fundo ou corretora)
-        3. Valor (número positivo representando o aporte)
-        4. Categoria (use sempre "Investimentos").
+        Extraia uma lista de ativos com:
+        1. asset_name: Nome ou ticker do ativo.
+        2. broker: Nome da corretora/instituição.
+        3. asset_type: Categoria (Ações, FIIs, Renda Fixa, Tesouro, Cripto, Outros).
+        4. balance: Saldo monetário atual (número).
+        5. reference_date: O primeiro dia do mês referente ao extrato (formato YYYY-MM-DD).
 
-        ${instructionsText}
-
-        IMPORTANTE: 
-        - Mapeie a categoria de forma inteligente.
-        - Se a descrição for similar a alguma das instruções personalizadas acima, use a categoria indicada na instrução.
-
-        Retorne APENAS um array JSON válido, sem formatação markdown, seguindo este esquema:
-        [
-          { "date": "2024-03-26", "description": "Tesouro Direto", "amount": 1000.00, "category": "Investimentos" }
-        ]
-        Se não encontrar investimentos, retorne um array vazio [].
+        Retorne APENAS um array JSON válido.
       `;
 
-      const authContext = { user_id: user!.id, session_id: "client-session" };
       const response = await ai.models.generateContent({
         model: "gemini-3-flash-preview",
-        contents: [
-          {
-            parts: [
-              { text: `CONTEXTO DE ENTRADA: ${JSON.stringify({ auth_context: authContext })}` },
-              { text: prompt },
-              {
-                inlineData: {
-                  mimeType: file.type,
-                  data: fileData
-                }
-              }
-            ]
-          }
-        ],
+        contents: [{
+          parts: [
+            { text: prompt },
+            { inlineData: { mimeType: file.type, data: fileData } }
+          ]
+        }],
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -396,110 +197,98 @@ export default function Page() {
             items: {
               type: Type.OBJECT,
               properties: {
-                date: { type: Type.STRING },
-                description: { type: Type.STRING },
-                amount: { type: Type.NUMBER },
-                category: { type: Type.STRING }
+                asset_name: { type: Type.STRING },
+                broker: { type: Type.STRING },
+                asset_type: { type: Type.STRING },
+                balance: { type: Type.NUMBER },
+                reference_date: { type: Type.STRING }
               },
-              required: ["date", "description", "amount", "category"]
+              required: ["asset_name", "broker", "asset_type", "balance", "reference_date"]
             }
           }
         }
       });
 
-      const extractedData = JSON.parse(response.text || "[]");
-      
-      if (extractedData.length > 0) {
-        const { data: catData } = await supabase.from('categories').select('id').eq('name', 'Investimentos').single();
-        const investmentCategoryId = catData?.id;
+      const extracted = JSON.parse(response.text || "[]");
+      if (extracted.length > 0) {
+        const payloads = extracted.map((item: any) => ({
+          ...item,
+          user_id: user.id,
+          updated_at: new Date().toISOString()
+        }));
 
-        const transactionsToInsert = extractedData.map((item: any) => {
-          return {
-            description: item.description,
-            amount: Math.abs(item.amount),
-            date: item.date,
-            category_id: investmentCategoryId,
-            user_id: user!.id,
-          };
-        });
+        const { data, error } = await supabase
+          .from('investments')
+          .upsert(payloads, { onConflict: 'user_id,asset_name,broker,reference_date' })
+          .select();
 
-        const { error } = await supabase.from('transactions').insert(transactionsToInsert);
         if (error) throw error;
 
-        alert(`${extractedData.length} investimentos importados com sucesso!`);
+        // Feedback logic: check how many were new vs updated
+        // In a real scenario with upsert, we might need to check existing records first to give precise counts,
+        // but for simplicity, we'll report the total processed.
+        alert(`${extracted.length} ativos processados (novos ou atualizados) com sucesso!`);
         fetchAvailableMonths();
-        fetchTransactions();
+        fetchInvestments();
       } else {
-        alert("Nenhum investimento identificado no arquivo.");
+        alert("Nenhum dado extraído.");
       }
     } catch (error) {
       console.error('Erro na importação:', error);
-      alert("Erro ao processar o arquivo. Verifique se é um extrato válido.");
+      alert("Erro ao processar arquivo.");
     } finally {
       setIsImporting(false);
       if (e.target) e.target.value = '';
     }
   };
 
-  const isSupabaseConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL && 
-                               process.env.NEXT_PUBLIC_SUPABASE_URL !== 'https://placeholder-project.supabase.co' &&
-                               process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
-                               process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY !== 'placeholder-key';
-
   if (authLoading) {
-    return <div className="min-h-screen bg-surface flex items-center justify-center">
-      <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-    </div>;
+    return (
+      <div className="min-h-screen bg-surface flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    );
   }
 
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      
       <main className="flex-1 ml-64 bg-surface min-h-screen pb-20">
         <TopBar />
         
-        {!isSupabaseConfigured && (
-          <div className="mx-12 mt-8 p-4 bg-error-container text-on-error-container rounded-2xl border border-error/20 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-full bg-error/10 flex items-center justify-center shrink-0">
-              <Tag className="text-error" size={20} />
-            </div>
-            <div>
-              <p className="font-bold">Supabase não configurado</p>
-              <p className="text-sm opacity-80">Por favor, configure as variáveis de ambiente NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY nas configurações do projeto.</p>
-            </div>
-          </div>
-        )}
-
         <div className="p-12 max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-16">
             <div>
               <h2 className="text-5xl font-black text-on-surface font-headline tracking-tight mb-3">Investimentos</h2>
-              <p className="text-on-surface-variant text-lg font-medium">Gestão de sua carteira e aportes estratégicos.</p>
+              <p className="text-on-surface-variant text-lg font-medium">Gestão consolidada de ativos e evolução patrimonial.</p>
             </div>
             
             <div className="flex items-center gap-4">
               <button 
-                onClick={() => setIsModalOpen(true)}
+                onClick={() => {
+                  setEditingInvestment(null);
+                  setIsModalOpen(true);
+                }}
                 className="px-8 py-3.5 rounded-2xl bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold flex items-center gap-2.5 shadow-lg shadow-primary/20 hover:opacity-90 transition-all active:scale-95"
               >
                 <TrendingUp size={20} />
-                Novo Investimento
+                Novo Ativo
               </button>
               
-              <button className="px-8 py-3.5 rounded-2xl bg-surface-container-lowest text-on-surface font-bold flex items-center gap-2.5 border border-outline-variant/10 hover:bg-surface-container-low transition-all shadow-sm">
-                <Filter size={18} />
-                Filtros
-              </button>
+              <label className={cn(
+                "px-8 py-3.5 rounded-2xl bg-surface-container-lowest text-primary font-bold flex items-center gap-2.5 border border-outline-variant/10 hover:bg-surface-container-low transition-all shadow-sm cursor-pointer",
+                isImporting && "opacity-50 cursor-not-allowed"
+              )}>
+                {isImporting ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+                {isImporting ? 'Importando...' : 'Importar Extrato'}
+                <input type="file" className="hidden" onChange={handleImportFile} disabled={isImporting} accept="image/*,application/pdf" />
+              </label>
             </div>
           </div>
 
-          <Stats 
-            total={totals.total} 
-            currentMonthTotal={comparisonStats.current}
-            previousMonthTotal={comparisonStats.previous}
-            title="Investimentos Totais"
-            type="investment"
+          <InvestmentStats 
+            total={investments.reduce((acc, i) => acc + i.balance, 0)} 
+            categoryTotals={categoryTotals}
           />
 
           <div className="flex flex-wrap items-center gap-5 mb-8 px-2">
@@ -516,45 +305,30 @@ export default function Page() {
                 ))}
               </select>
             </div>
-            
-            <div className="ml-auto flex items-center gap-4">
-              <label className={cn(
-                "flex items-center gap-2.5 text-primary font-black text-sm hover:underline cursor-pointer transition-all group",
-                isImporting && "opacity-50 cursor-not-allowed pointer-events-none"
-              )}>
-                {isImporting ? (
-                  <Loader2 size={18} className="animate-spin" />
-                ) : (
-                  <Upload size={18} className="group-hover:-translate-y-0.5 transition-transform" />
-                )}
-                {isImporting ? 'Processando...' : 'Importar Investimentos'}
-                <input 
-                  type="file" 
-                  className="hidden" 
-                  accept="image/*,application/pdf"
-                  onChange={handleImportFile}
-                  disabled={isImporting}
-                />
-              </label>
-
-              <button className="flex items-center gap-2.5 text-primary font-black text-sm hover:underline transition-all group">
-                <Download size={18} className="group-hover:translate-y-0.5 transition-transform" />
-                Exportar PDF
-              </button>
-            </div>
           </div>
 
           {loading ? (
             <div className="flex flex-col items-center justify-center py-32 gap-4">
               <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-on-surface-variant font-medium">Sincronizando seus registros...</p>
+              <p className="text-on-surface-variant font-medium">Sincronizando sua carteira...</p>
+            </div>
+          ) : totalCount === 0 ? (
+            <div className="flex flex-col items-center justify-center py-32 gap-4 bg-surface-container-low rounded-[2.5rem] border border-dashed border-outline-variant/30">
+              <div className="w-20 h-20 bg-surface-container-high rounded-full flex items-center justify-center mb-2">
+                <TrendingUp size={40} className="text-on-surface-variant/30" />
+              </div>
+              <h3 className="text-2xl font-black font-headline text-on-surface">Sua carteira está vazia</h3>
+              <p className="text-on-surface-variant font-medium">Adicione seu primeiro ativo ou importe um extrato.</p>
             </div>
           ) : (
             <>
-              <TransactionTable 
-                transactions={transactions} 
-                onDelete={handleDeleteTransaction}
-                onEdit={handleEditTransaction}
+              <InvestmentTable 
+                investments={investments} 
+                onDelete={handleDeleteInvestment}
+                onEdit={(inv) => {
+                  setEditingInvestment(inv);
+                  setIsModalOpen(true);
+                }}
               />
 
               <div className="mt-8 flex flex-col md:flex-row items-center justify-between gap-6 px-2">
@@ -566,18 +340,14 @@ export default function Page() {
                       setPageSize(parseInt(e.target.value));
                       setCurrentPage(1);
                     }}
-                    className="bg-surface-container-low border border-outline-variant/10 rounded-xl px-4 py-2 text-sm font-bold text-on-surface focus:ring-2 focus:ring-primary outline-none cursor-pointer transition-all"
+                    className="bg-surface-container-low border border-outline-variant/10 rounded-xl px-4 py-2 text-sm font-bold text-on-surface outline-none cursor-pointer transition-all"
                   >
                     <option value={25}>25</option>
                     <option value={50}>50</option>
                     <option value={100}>100</option>
                   </select>
                   <span className="text-sm font-bold text-on-surface-variant/60">
-                    {totalCount > 0 ? (
-                      <>
-                        {Math.min((currentPage - 1) * pageSize + 1, totalCount)} - {Math.min(currentPage * pageSize, totalCount)} de {totalCount}
-                      </>
-                    ) : '0 - 0 de 0'}
+                    {totalCount > 0 ? `${(currentPage - 1) * pageSize + 1} - ${Math.min(currentPage * pageSize, totalCount)} de ${totalCount}` : '0 - 0 de 0'}
                   </span>
                 </div>
 
@@ -589,41 +359,6 @@ export default function Page() {
                   >
                     <ChevronLeft size={20} />
                   </button>
-                  
-                  <div className="flex items-center gap-1.5">
-                    {Array.from({ length: Math.ceil(totalCount / pageSize) }).map((_, i) => {
-                      const pageNum = i + 1;
-                      const totalPages = Math.ceil(totalCount / pageSize);
-                      
-                      if (
-                        pageNum === 1 || 
-                        pageNum === totalPages || 
-                        (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
-                      ) {
-                        return (
-                          <button
-                            key={pageNum}
-                            onClick={() => setCurrentPage(pageNum)}
-                            className={cn(
-                              "w-10 h-10 rounded-xl text-sm font-bold transition-all",
-                              currentPage === pageNum 
-                                ? "bg-primary text-on-primary shadow-lg shadow-primary/20" 
-                                : "bg-surface-container-low text-on-surface-variant hover:bg-surface-container-high"
-                            )}
-                          >
-                            {pageNum}
-                          </button>
-                        );
-                      } else if (
-                        pageNum === currentPage - 2 || 
-                        pageNum === currentPage + 2
-                      ) {
-                        return <span key={pageNum} className="text-on-surface-variant/40">...</span>;
-                      }
-                      return null;
-                    })}
-                  </div>
-
                   <button 
                     disabled={currentPage === Math.ceil(totalCount / pageSize) || totalCount === 0}
                     onClick={() => setCurrentPage(prev => prev + 1)}
@@ -638,13 +373,12 @@ export default function Page() {
         </div>
       </main>
 
-      <TransactionModal 
-        key={isModalOpen ? (editingTransaction?.id || 'new') : 'closed'}
+      <InvestmentModal 
+        key={isModalOpen ? (editingInvestment?.id || 'new') : 'closed'}
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
-        onSave={handleSaveTransaction}
-        editingTransaction={editingTransaction}
-        type="investment"
+        onSave={handleSaveInvestment}
+        editingInvestment={editingInvestment}
       />
     </div>
   );
