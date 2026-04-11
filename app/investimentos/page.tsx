@@ -4,6 +4,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
 import { InvestmentStats } from '@/components/InvestmentStats';
+import { InvestmentAdvisor } from '@/components/InvestmentAdvisor';
 import { InvestmentTable } from '@/components/InvestmentTable';
 import { InvestmentModal } from '@/components/InvestmentModal';
 import { Filter, Download, Calendar, Upload, Loader2, ChevronLeft, ChevronRight, TrendingUp, DollarSign } from 'lucide-react';
@@ -290,6 +291,13 @@ export default function InvestmentsPage() {
             total={investments.reduce((acc, i) => acc + i.balance, 0)} 
             categoryTotals={categoryTotals}
           />
+
+          {user && (
+            <InvestmentAdvisor 
+              investments={investments} 
+              userId={user.id} 
+            />
+          )}
 
           <div className="flex flex-wrap items-center gap-5 mb-8 px-2">
             <div className="flex items-center gap-3 px-6 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5">
