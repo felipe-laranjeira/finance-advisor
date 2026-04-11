@@ -28,38 +28,52 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const checkUser = async () => {
       try {
-        const { data: { session }, error } = await supabase.auth.getSession();
+        // First try to get the session from local storage/cookies
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
-        if (error) {
-          // Check for the specific refresh token error
-          if (error.message.includes('Refresh Token Not Found') || error.message.includes('invalid_refresh_token')) {
-            console.warn('Sessão inválida detectada, limpando dados locais...');
-            await supabase.auth.signOut();
-            setUser(null);
-            if (pathname !== '/') {
-              router.push('/');
-            }
-          } else {
-            console.warn('Erro de sessão:', error.message);
+        if (sessionError) {
+          throw sessionError;
+        }
+
+        if (session) {
+          // Verify the user is still valid with the server
+          const { data: { user: verifiedUser }, error: userError } = await supabase.auth.getUser();
+          
+          if (userError) {
+            throw userError;
           }
-        } else if (session) {
-          setUser(session.user);
+          
+          setUser(verifiedUser);
         } else {
           setUser(null);
-          if (pathname !== '/' && pathname !== '/painel' && !pathname.startsWith('/receitas') && !pathname.startsWith('/despesas')) {
-            // Only redirect if we are not on a protected route that handles its own loading
-            // But actually, usually we want to redirect to / if no session
-            router.push('/');
+          if (pathname !== '/' && !['/painel', '/receitas', '/despesas', '/investimentos'].some(path => pathname.startsWith(path))) {
+            // Only redirect if we are on a protected route
+            // router.push('/');
           }
         }
       } catch (err: any) {
-        if (err.message?.includes('Refresh Token Not Found')) {
-          await supabase.auth.signOut();
-        }
-        console.error('Erro inesperado de autenticação:', err);
-        setUser(null);
-        if (pathname !== '/') {
-          router.push('/');
+        const errorMessage = err.message || '';
+        if (
+          errorMessage.includes('Refresh Token Not Found') || 
+          errorMessage.includes('invalid_refresh_token') ||
+          errorMessage.includes('refresh_token_not_found')
+        ) {
+          console.warn('Sessão expirada ou inválida. Limpando dados...');
+          // Use a try-catch for signOut to avoid infinite loops if it fails
+          try {
+            await supabase.auth.signOut();
+          } catch (signOutErr) {
+            // If signOut fails, manually clear local storage as a fallback
+            if (typeof window !== 'undefined') {
+              localStorage.removeItem('supabase.auth.token');
+            }
+          }
+          setUser(null);
+          if (pathname !== '/') {
+            router.push('/');
+          }
+        } else {
+          console.error('Erro de autenticação:', errorMessage);
         }
       } finally {
         setLoading(false);

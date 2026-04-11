@@ -5,6 +5,7 @@ import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/components/AuthProvider';
 
 interface Transaction {
   id: string;
@@ -26,13 +27,7 @@ interface TransactionModalProps {
 
 export function TransactionModal({ isOpen, onClose, onSave, editingTransaction, type = 'expense' }: TransactionModalProps) {
   const [categories, setCategories] = useState<string[]>([]);
-  const [user, setUser] = useState<any>(null);
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-    });
-  }, []);
+  const { user } = useAuth();
 
   const maskCurrency = (value: string) => {
     const digits = value.replace(/\D/g, '');

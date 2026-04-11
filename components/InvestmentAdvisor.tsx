@@ -26,10 +26,12 @@ type RiskProfile = 'Conservador' | 'Moderado' | 'Arrojado';
 export function InvestmentAdvisor({ investments, userId }: InvestmentAdvisorProps) {
   const [profile, setProfile] = useState<RiskProfile>('Moderado');
   const [analysis, setAnalysis] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loadingAI, setLoadingAI] = useState(false);
 
-  const generateAnalysis = async () => {
-    setLoading(true);
+  const handleRunAIAnalysis = async () => {
+    if (loadingAI) return; // Evita cliques duplos
+    
+    setLoadingAI(true);
     setAnalysis(null);
 
     try {
@@ -87,7 +89,7 @@ export function InvestmentAdvisor({ investments, userId }: InvestmentAdvisorProp
       console.error('Erro ao gerar análise:', error);
       setAnalysis("Ocorreu um erro ao processar sua solicitação. Por favor, tente novamente.");
     } finally {
-      setLoading(false);
+      setLoadingAI(false);
     }
   };
 
@@ -122,18 +124,18 @@ export function InvestmentAdvisor({ investments, userId }: InvestmentAdvisorProp
             ))}
             
             <button
-              onClick={generateAnalysis}
-              disabled={loading}
+              onClick={handleRunAIAnalysis}
+              disabled={loadingAI}
               className="ml-2 px-8 py-2.5 rounded-xl bg-on-surface text-surface font-bold flex items-center gap-2 hover:opacity-90 transition-all disabled:opacity-50"
             >
-              {loading ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}
-              Gerar Análise
+              {loadingAI ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}
+              {loadingAI ? 'Analisando...' : 'Gerar Análise'}
             </button>
           </div>
         </div>
 
         <AnimatePresence mode="wait">
-          {loading ? (
+          {loadingAI ? (
             <motion.div 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
