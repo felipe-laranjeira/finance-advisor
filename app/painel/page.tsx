@@ -45,7 +45,9 @@ export default function DashboardPage() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [incomeData, setIncomeData] = useState<any[]>([]);
   const [expenseData, setExpenseData] = useState<any[]>([]);
+  const [investmentData, setInvestmentData] = useState<any[]>([]);
   const [evolutionData, setEvolutionData] = useState<any[]>([]);
+  const [equityEvolutionData, setEquityEvolutionData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasData, setHasData] = useState<boolean | null>(null);
 
@@ -127,9 +129,18 @@ export default function DashboardPage() {
         .gte('date', startDate)
         .lte('date', endDate);
 
-      // Fetch Monthly Evolution (last 6 months)
+      // Fetch Investments for selected month
+      const { data: investments } = await supabase
+        .from('investments')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('reference_date', startDate); // Investments are usually stored with reference_date as the 1st of the month
+
+      // Fetch Monthly Evolution (last 12 months)
       const evolutionPromises = [];
-      for (let i = 5; i >= 0; i--) {
+      const equityEvolutionPromises = [];
+      
+      for (let i = 11; i >= 0; i--) {
         const d = new Date(selectedYear, selectedMonth - i, 1);
         const start = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
         const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
@@ -144,12 +155,29 @@ export default function DashboardPage() {
             expense: Math.abs(exp.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0)
           }))
         );
+
+        equityEvolutionPromises.push(
+          supabase.from('investments')
+            .select('balance')
+            .eq('user_id', user.id)
+            .eq('reference_date', start)
+            .then(({ data }) => ({
+              month: months[d.getMonth()],
+              balance: data?.reduce((acc, curr) => acc + Number(curr.balance), 0) || 0
+            }))
+        );
       }
-      const evolution = await Promise.all(evolutionPromises);
+      
+      const [evolution, equityEvolution] = await Promise.all([
+        Promise.all(evolutionPromises),
+        Promise.all(equityEvolutionPromises)
+      ]);
 
       setIncomeData(income || []);
       setExpenseData(expenses || []);
+      setInvestmentData(investments || []);
       setEvolutionData(evolution);
+      setEquityEvolutionData(equityEvolution);
       setLoading(false);
     };
 
@@ -172,14 +200,29 @@ export default function DashboardPage() {
       value: expenseByCategory[name]
     }));
 
+    const investmentByType = investmentData.reduce((acc: any, curr) => {
+      const type = curr.asset_type || 'Outros';
+      acc[type] = (acc[type] || 0) + Number(curr.balance);
+      return acc;
+    }, {});
+
+    const investmentPieData = Object.keys(investmentByType).map(name => ({
+      name,
+      value: investmentByType[name]
+    }));
+
+    const totalEquity = investmentData.reduce((acc, curr) => acc + Number(curr.balance), 0);
+
     return {
       totalIncome,
       totalExpense,
       balance,
       pieData,
+      investmentPieData,
+      totalEquity,
       isOverspent: totalExpense > totalIncome && totalIncome > 0
     };
-  }, [incomeData, expenseData]);
+  }, [incomeData, expenseData, investmentData]);
 
   if (loading && !incomeData.length && !expenseData.length) {
     return (
@@ -351,8 +394,8 @@ export default function DashboardPage() {
             {/* Monthly Evolution Chart */}
             <div className="bg-surface-container-low p-8 rounded-[2.5rem] border border-outline-variant/10">
               <div className="mb-8">
-                <h3 className="text-xl font-black font-headline text-on-surface tracking-tight">Evolução Mensal</h3>
-                <p className="text-sm text-on-surface-variant font-medium">Comparativo de receitas e despesas (últimos 6 meses)</p>
+                <h3 className="text-xl font-black font-headline text-on-surface tracking-tight">Evolução de Fluxo de Caixa</h3>
+                <p className="text-sm text-on-surface-variant font-medium">Comparativo de receitas e despesas (últimos 12 meses)</p>
               </div>
               <div className="h-80 w-full">
                 <ResponsiveContainer width="100%" height="100%">
@@ -362,22 +405,57 @@ export default function DashboardPage() {
                       dataKey="month" 
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fill: '#434652', fontSize: 12, fontWeight: 700 }}
+                      tick={{ fill: '#434652', fontSize: 10, fontWeight: 700 }}
                       dy={10}
                     />
                     <YAxis 
                       axisLine={false} 
                       tickLine={false} 
-                      tick={{ fill: '#434652', fontSize: 12, fontWeight: 700 }}
-                      tickFormatter={(value) => `R$ ${value}`}
+                      tick={{ fill: '#434652', fontSize: 10, fontWeight: 700 }}
+                      tickFormatter={(value) => formatCurrency(value)}
                     />
                     <Tooltip 
                       cursor={{ fill: '#f2f4f7' }}
                       contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                      formatter={(value: number) => formatCurrency(value)}
                     />
                     <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ paddingBottom: '20px' }} />
-                    <Bar dataKey="income" name="Receita" fill="#006b5f" radius={[6, 6, 0, 0]} barSize={20} />
-                    <Bar dataKey="expense" name="Despesa" fill="#68151b" radius={[6, 6, 0, 0]} barSize={20} />
+                    <Bar dataKey="income" name="Receita" fill="#006b5f" radius={[6, 6, 0, 0]} barSize={12} />
+                    <Bar dataKey="expense" name="Despesa" fill="#68151b" radius={[6, 6, 0, 0]} barSize={12} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            {/* Equity Evolution Chart */}
+            <div className="bg-surface-container-low p-8 rounded-[2.5rem] border border-outline-variant/10">
+              <div className="mb-8">
+                <h3 className="text-xl font-black font-headline text-on-surface tracking-tight">Evolução Patrimonial</h3>
+                <p className="text-sm text-on-surface-variant font-medium">Crescimento do patrimônio total (últimos 12 meses)</p>
+              </div>
+              <div className="h-80 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={equityEvolutionData}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e0e3e6" />
+                    <XAxis 
+                      dataKey="month" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#434652', fontSize: 10, fontWeight: 700 }}
+                      dy={10}
+                    />
+                    <YAxis 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#434652', fontSize: 10, fontWeight: 700 }}
+                      tickFormatter={(value) => formatCurrency(value)}
+                    />
+                    <Tooltip 
+                      cursor={{ fill: '#f2f4f7' }}
+                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                      formatter={(value: number) => formatCurrency(value)}
+                    />
+                    <Bar dataKey="balance" name="Patrimônio" fill="#003178" radius={[6, 6, 0, 0]} barSize={24} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -408,6 +486,7 @@ export default function DashboardPage() {
                       </Pie>
                       <Tooltip 
                         contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                        formatter={(value: number) => formatCurrency(value)}
                       />
                     </PieChart>
                   </ResponsiveContainer>
@@ -425,6 +504,60 @@ export default function DashboardPage() {
                   {stats.pieData.length === 0 && (
                     <div className="text-center py-8 text-on-surface-variant opacity-50 font-medium">
                       Nenhuma despesa registrada
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Assets Split Donut Chart */}
+            <div className="bg-surface-container-low p-8 rounded-[2.5rem] border border-outline-variant/10">
+              <div className="mb-8">
+                <h3 className="text-xl font-black font-headline text-on-surface tracking-tight">Patrimônio por Ativo</h3>
+                <p className="text-sm text-on-surface-variant font-medium">Distribuição dos investimentos no mês selecionado</p>
+              </div>
+              <div className="h-80 w-full flex flex-col md:flex-row items-center justify-center gap-8">
+                <div className="h-full w-full md:w-1/2">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={stats.investmentPieData}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={100}
+                        paddingAngle={5}
+                        dataKey="value"
+                      >
+                        {stats.investmentPieData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={COLORS[(index + 2) % COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip 
+                        contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                        formatter={(value: number) => formatCurrency(value)}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="w-full md:w-1/2 space-y-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                  {stats.investmentPieData.map((entry, index) => (
+                    <div key={entry.name} className="flex items-center justify-between p-3 bg-surface-container-lowest rounded-xl border border-outline-variant/5">
+                      <div className="flex items-center gap-3">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[(index + 2) % COLORS.length] }} />
+                        <span className="text-sm font-bold text-on-surface">{entry.name}</span>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-sm font-black text-on-surface">{formatCurrency(entry.value)}</div>
+                        <div className="text-[10px] font-bold text-on-surface-variant opacity-60">
+                          {((entry.value / stats.totalEquity) * 100).toFixed(1)}%
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                  {stats.investmentPieData.length === 0 && (
+                    <div className="text-center py-8 text-on-surface-variant opacity-50 font-medium">
+                      Nenhum investimento registrado
                     </div>
                   )}
                 </div>
