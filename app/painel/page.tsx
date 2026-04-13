@@ -417,7 +417,7 @@ export default function DashboardPage() {
                     <Tooltip 
                       cursor={{ fill: '#f2f4f7' }}
                       contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                      formatter={(value: number) => formatCurrency(value)}
+                      formatter={(value: any) => formatCurrency(Number(value))}
                     />
                     <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ paddingBottom: '20px' }} />
                     <Bar dataKey="income" name="Receita" fill="#006b5f" radius={[6, 6, 0, 0]} barSize={12} />
@@ -453,7 +453,7 @@ export default function DashboardPage() {
                     <Tooltip 
                       cursor={{ fill: '#f2f4f7' }}
                       contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                      formatter={(value: number) => formatCurrency(value)}
+                      formatter={(value: any) => formatCurrency(Number(value))}
                     />
                     <Bar dataKey="balance" name="Patrimônio" fill="#003178" radius={[6, 6, 0, 0]} barSize={24} />
                   </BarChart>
@@ -486,7 +486,7 @@ export default function DashboardPage() {
                       </Pie>
                       <Tooltip 
                         contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                        formatter={(value: number) => formatCurrency(value)}
+                        formatter={(value: any) => formatCurrency(Number(value))}
                       />
                     </PieChart>
                   </ResponsiveContainer>
@@ -535,7 +535,7 @@ export default function DashboardPage() {
                       </Pie>
                       <Tooltip 
                         contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                        formatter={(value: number) => formatCurrency(value)}
+                        formatter={(value: any) => formatCurrency(Number(value))}
                       />
                     </PieChart>
                   </ResponsiveContainer>
