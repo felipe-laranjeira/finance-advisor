@@ -22,6 +22,7 @@ const menuItems = [
   { icon: LayoutDashboard, label: 'Painel', href: '/painel', active: false },
   { icon: ArrowDownCircle, label: 'Receitas', href: '/receitas', active: false },
   { icon: Receipt, label: 'Despesas', href: '/despesas', active: false },
+  { icon: LayoutDashboard, label: 'Orçamento', href: '/orcamento', active: false },
   { icon: BarChart3, label: 'Investimentos', href: '/investimentos', active: false },
   { icon: Settings, label: 'Configurações', href: '#', active: false },
 ];

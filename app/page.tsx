@@ -27,16 +27,28 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+    try {
+      if (process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('placeholder-project')) {
+        throw new Error('Configuração do Supabase ausente. Por favor, configure NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY nas configurações.');
+      }
 
-    if (error) {
-      setError(error.message === 'Invalid login credentials' ? 'Credenciais inválidas. Verifique seu e-mail e senha.' : error.message);
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        setError(error.message === 'Invalid login credentials' ? 'Credenciais inválidas. Verifique seu e-mail e senha.' : error.message);
+        setLoading(false);
+      } else {
+        router.push('/painel');
+      }
+    } catch (err: any) {
+      console.error('Login error:', err);
+      setError(err.message === 'Failed to fetch' 
+        ? 'Erro de conexão ou configuração. Verifique se as chaves do Supabase estão corretas.' 
+        : err.message || 'Ocorreu um erro inesperado.');
       setLoading(false);
-    } else {
-      router.push('/painel');
     }
   };
 
