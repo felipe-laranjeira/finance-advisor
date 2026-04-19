@@ -48,6 +48,7 @@ export default function DashboardPage() {
   const [investmentData, setInvestmentData] = useState<any[]>([]);
   const [evolutionData, setEvolutionData] = useState<any[]>([]);
   const [equityEvolutionData, setEquityEvolutionData] = useState<any[]>([]);
+  const [budgets, setBudgets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasData, setHasData] = useState<boolean | null>(null);
 
@@ -108,77 +109,107 @@ export default function DashboardPage() {
   useEffect(() => {
     const fetchData = async () => {
       if (!user) return;
+
+      // Safety check for Supabase configuration
+      const isConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL && 
+                           process.env.NEXT_PUBLIC_SUPABASE_URL !== 'https://placeholder-project.supabase.co';
+      
+      if (!isConfigured) {
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
 
-      const startDate = new Date(selectedYear, selectedMonth, 1).toISOString().split('T')[0];
-      const endDate = new Date(selectedYear, selectedMonth + 1, 0).toISOString().split('T')[0];
+      try {
+        const startDate = new Date(selectedYear, selectedMonth, 1).toISOString().split('T')[0];
+        const endDate = new Date(selectedYear, selectedMonth + 1, 0).toISOString().split('T')[0];
 
-      // Fetch Income for selected month
-      const { data: income } = await supabase
-        .from('incoming')
-        .select('*, incoming_categories(name)')
-        .eq('user_id', user.id)
-        .gte('date', startDate)
-        .lte('date', endDate);
-
-      // Fetch Expenses for selected month
-      const { data: expenses } = await supabase
-        .from('transactions')
-        .select('*, categories(name)')
-        .eq('user_id', user.id)
-        .gte('date', startDate)
-        .lte('date', endDate);
-
-      // Fetch Investments for selected month
-      const { data: investments } = await supabase
-        .from('investments')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('reference_date', startDate); // Investments are usually stored with reference_date as the 1st of the month
-
-      // Fetch Monthly Evolution (last 12 months)
-      const evolutionPromises = [];
-      const equityEvolutionPromises = [];
-      
-      for (let i = 11; i >= 0; i--) {
-        const d = new Date(selectedYear, selectedMonth - i, 1);
-        const start = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
-        const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
+        // Fetch Income for selected month
+        const { data: income, error: incomeErr } = await supabase
+          .from('incoming')
+          .select('*, incoming_categories(name)')
+          .eq('user_id', user.id)
+          .gte('date', startDate)
+          .lte('date', endDate);
         
-        evolutionPromises.push(
-          Promise.all([
-            supabase.from('incoming').select('amount').eq('user_id', user.id).gte('date', start).lte('date', end),
-            supabase.from('transactions').select('amount').eq('user_id', user.id).gte('date', start).lte('date', end)
-          ]).then(([inc, exp]) => ({
-            month: months[d.getMonth()],
-            income: inc.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0,
-            expense: Math.abs(exp.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0)
-          }))
-        );
+        if (incomeErr) throw incomeErr;
 
-        equityEvolutionPromises.push(
-          supabase.from('investments')
-            .select('balance')
-            .eq('user_id', user.id)
-            .eq('reference_date', start)
-            .then(({ data }) => ({
+        // Fetch Expenses for selected month
+        const { data: expenses, error: expensesErr } = await supabase
+          .from('transactions')
+          .select('*, categories(name)')
+          .eq('user_id', user.id)
+          .gte('date', startDate)
+          .lte('date', endDate);
+
+        if (expensesErr) throw expensesErr;
+
+        // Fetch Investments for selected month
+        const { data: investments, error: investmentsErr } = await supabase
+          .from('investments')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('reference_date', startDate); 
+
+        if (investmentsErr) throw investmentsErr;
+
+        // Fetch Budgets
+        const { data: budgetData, error: budgetErr } = await supabase
+          .from('budgets')
+          .select('*, categories(name)')
+          .eq('user_id', user.id);
+
+        if (budgetErr && budgetErr.code !== '42P01') throw budgetErr;
+
+        // Fetch Monthly Evolution (last 12 months)
+        const evolutionPromises = [];
+        const equityEvolutionPromises = [];
+        
+        for (let i = 11; i >= 0; i--) {
+          const d = new Date(selectedYear, selectedMonth - i, 1);
+          const start = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
+          const end = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().split('T')[0];
+          
+          evolutionPromises.push(
+            Promise.all([
+              supabase.from('incoming').select('amount').eq('user_id', user.id).gte('date', start).lte('date', end),
+              supabase.from('transactions').select('amount').eq('user_id', user.id).gte('date', start).lte('date', end)
+            ]).then(([inc, exp]) => ({
               month: months[d.getMonth()],
-              balance: data?.reduce((acc, curr) => acc + Number(curr.balance), 0) || 0
+              income: inc.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0,
+              expense: Math.abs(exp.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0)
             }))
-        );
-      }
-      
-      const [evolution, equityEvolution] = await Promise.all([
-        Promise.all(evolutionPromises),
-        Promise.all(equityEvolutionPromises)
-      ]);
+          );
 
-      setIncomeData(income || []);
-      setExpenseData(expenses || []);
-      setInvestmentData(investments || []);
-      setEvolutionData(evolution);
-      setEquityEvolutionData(equityEvolution);
-      setLoading(false);
+          equityEvolutionPromises.push(
+            supabase.from('investments')
+              .select('balance')
+              .eq('user_id', user.id)
+              .eq('reference_date', start)
+              .then(({ data }) => ({
+                month: months[d.getMonth()],
+                balance: data?.reduce((acc, curr) => acc + Number(curr.balance), 0) || 0
+              }))
+          );
+        }
+        
+        const [evolution, equityEvolution] = await Promise.all([
+          Promise.all(evolutionPromises),
+          Promise.all(equityEvolutionPromises)
+        ]);
+
+        setIncomeData(income || []);
+        setExpenseData(expenses || []);
+        setInvestmentData(investments || []);
+        setEvolutionData(evolution);
+        setEquityEvolutionData(equityEvolution);
+        setBudgets(budgetData || []);
+      } catch (err) {
+        console.error('Erro ao buscar dados do painel:', err);
+      } finally {
+        setLoading(false);
+      }
     };
 
     fetchData();
@@ -213,6 +244,22 @@ export default function DashboardPage() {
 
     const totalEquity = investmentData.reduce((acc, curr) => acc + Number(curr.balance), 0);
 
+    // Budget vs Expenses Comparison
+    const budgetAnalysis = budgets.map(b => {
+      const catName = b.categories?.name;
+      const spent = expenseByCategory[catName] || 0;
+      const limit = Number(b.limit_amount);
+      const percent = limit > 0 ? (spent / limit) * 100 : 0;
+      
+      return {
+        name: catName,
+        spent,
+        limit,
+        percent,
+        status: percent > 100 ? 'over' : percent > 80 ? 'warning' : 'ok'
+      };
+    }).filter(b => b.limit > 0);
+
     return {
       totalIncome,
       totalExpense,
@@ -220,11 +267,17 @@ export default function DashboardPage() {
       pieData,
       investmentPieData,
       totalEquity,
-      isOverspent: totalExpense > totalIncome && totalIncome > 0
+      isOverspent: totalExpense > totalIncome && totalIncome > 0,
+      budgetAnalysis
     };
-  }, [incomeData, expenseData, investmentData]);
+  }, [incomeData, expenseData, investmentData, budgets]);
 
-  if (loading && !incomeData.length && !expenseData.length) {
+  const isSupabaseConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL && 
+                               process.env.NEXT_PUBLIC_SUPABASE_URL !== 'https://placeholder-project.supabase.co' &&
+                               process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
+                               process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY !== 'placeholder-key';
+
+  if (loading && !incomeData.length && !expenseData.length && isSupabaseConfigured) {
     return (
       <div className="flex h-screen bg-surface">
         <Sidebar />
@@ -241,6 +294,18 @@ export default function DashboardPage() {
       <main className="flex-1 ml-64 flex flex-col">
         <TopBar />
         
+        {!isSupabaseConfigured && (
+          <div className="mx-8 mt-8 p-4 bg-error-container text-on-error-container rounded-2xl border border-error/20 flex items-center gap-4">
+            <div className="w-10 h-10 rounded-full bg-error/10 flex items-center justify-center shrink-0">
+               <AlertCircle className="text-error" size={20} />
+            </div>
+            <div>
+              <p className="font-bold">Supabase não configurado</p>
+              <p className="text-sm opacity-80">Configure as variáveis de ambiente NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY nas configurações para visualizar o painel.</p>
+            </div>
+          </div>
+        )}
+
         <div className="p-8 space-y-8 max-w-7xl mx-auto w-full">
           {/* Header with Month Selector */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -564,6 +629,89 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+
+          {/* Budget Analysis Table & Chart */}
+          {hasData && stats.budgetAnalysis.length > 0 && (
+            <div className="bg-surface-container-low p-8 rounded-[2.5rem] border border-outline-variant/10">
+              <div className="mb-8">
+                <h3 className="text-xl font-black font-headline text-on-surface tracking-tight">Despesas vs Orçamento</h3>
+                <p className="text-sm text-on-surface-variant font-medium">Acompanhamento do limite de gastos por categoria no mês de {months[selectedMonth]}</p>
+              </div>
+              
+              <div className="h-80 w-full mb-8">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={stats.budgetAnalysis} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e0e3e6" />
+                    <XAxis type="number" hide />
+                    <YAxis 
+                      dataKey="name" 
+                      type="category" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#434652', fontSize: 10, fontWeight: 700 }}
+                      width={100}
+                    />
+                    <Tooltip 
+                      cursor={{ fill: '#f2f4f7' }}
+                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                      formatter={(value: any, name: any) => [formatCurrency(Number(value)), name === 'spent' ? 'Gasto' : 'Limite']}
+                    />
+                    <Bar dataKey="limit" name="Limite" fill="#e0e3e6" radius={[0, 4, 4, 0]} barSize={20} />
+                    <Bar dataKey="spent" name="Gasto" radius={[0, 4, 4, 0]} barSize={20}>
+                      {stats.budgetAnalysis.map((entry, index) => (
+                        <Cell 
+                          key={`cell-${index}`} 
+                          fill={entry.percent > 100 ? '#68151b' : entry.percent > 80 ? '#f9a825' : '#006b5f'} 
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Budget Alerts */}
+              <div className="space-y-4">
+                {stats.budgetAnalysis.map((item) => {
+                  if (item.status === 'ok') return null;
+                  
+                  return (
+                    <motion.div 
+                      key={item.name}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      className={cn(
+                        "p-6 rounded-2xl flex items-center gap-4 border shadow-sm",
+                        item.status === 'over' 
+                          ? "bg-error-container text-on-error-container border-error/20" 
+                          : "bg-warning-container text-on-warning-container border-warning/20"
+                      )}
+                      style={item.status === 'warning' ? { backgroundColor: '#fff9c4', color: '#f57f17', borderColor: 'rgba(245, 127, 23, 0.2)' } : {}}
+                    >
+                      <AlertCircle size={24} className={item.status === 'over' ? "text-error" : "text-amber-600"} />
+                      <div className="flex-1">
+                        <p className="font-bold text-sm">
+                          {item.status === 'over' 
+                            ? `Você ultrapassou o limite estabelecido para a categoria ${item.name}!` 
+                            : `Você está chegando perto do limite estabelecido para a categoria ${item.name}!`}
+                        </p>
+                        <div className="flex items-center gap-4 mt-2">
+                          <div className="flex-1 h-2 bg-black/5 rounded-full overflow-hidden">
+                            <div 
+                              className={cn("h-full", item.status === 'over' ? "bg-error" : "bg-amber-600")} 
+                              style={{ width: `${Math.min(item.percent, 100)}%` }} 
+                            />
+                          </div>
+                          <span className="text-xs font-black uppercase tracking-widest whitespace-nowrap">
+                            {item.percent.toFixed(1)}% utilizado
+                          </span>
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </>
       )}
     </div>
