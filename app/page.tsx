@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Mail, Lock } from 'lucide-react';
 import { motion } from 'motion/react';
+import Link from 'next/link';
 
 import { useAuth } from '@/components/AuthProvider';
 
@@ -13,7 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, login } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
@@ -28,26 +29,22 @@ export default function LoginPage() {
     setError(null);
 
     try {
-      if (process.env.NEXT_PUBLIC_SUPABASE_URL?.includes('placeholder-project')) {
-        throw new Error('Configuração do Supabase ausente. Por favor, configure NEXT_PUBLIC_SUPABASE_URL e NEXT_PUBLIC_SUPABASE_ANON_KEY nas configurações.');
-      }
-
-      const { error } = await supabase.auth.signInWithPassword({
-        email,
-        password,
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
       });
 
-      if (error) {
-        setError(error.message === 'Invalid login credentials' ? 'Credenciais inválidas. Verifique seu e-mail e senha.' : error.message);
-        setLoading(false);
-      } else {
-        router.push('/painel');
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao fazer login');
       }
+
+      login(data);
     } catch (err: any) {
       console.error('Login error:', err);
-      setError(err.message === 'Failed to fetch' 
-        ? 'Erro de conexão ou configuração. Verifique se as chaves do Supabase estão corretas.' 
-        : err.message || 'Ocorreu um erro inesperado.');
+      setError(err.message || 'Ocorreu um erro inesperado.');
       setLoading(false);
     }
   };
@@ -161,6 +158,12 @@ export default function LoginPage() {
                   {loading ? 'Entrando...' : 'Entrar'}
                 </button>
               </form>
+              
+              <div className="mt-8 text-center">
+                <p className="text-sm text-on-surface-variant">
+                  Não tem uma conta? <Link href="/registrar" className="text-primary font-bold hover:underline decoration-primary/30">Registrar sua Conta</Link>
+                </p>
+              </div>
             </div>
           </div>
         </div>

@@ -3,24 +3,33 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { User } from '@supabase/supabase-js';
+
+interface AppUser {
+  id: string;
+  name: string;
+  email: string;
+  photo_url?: string;
+  status: 'Active' | 'Inactive';
+}
 
 interface AuthContextType {
-  user: User | null;
+  user: AppUser | null;
   loading: boolean;
+  login: (userData: AppUser) => void;
   signOut: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
+  login: () => {},
   signOut: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [loading, setLoading] = useState(true);
   const router = useRouter();
   const pathname = usePathname();
@@ -28,86 +37,59 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const checkUser = async () => {
       try {
-        // First try to get the session from local storage/cookies
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError) {
-          throw sessionError;
-        }
+        const storedUser = localStorage.getItem('app_user');
+        if (storedUser) {
+          const parsedUser = JSON.parse(storedUser);
+          
+          // Verify user status in DB
+          const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', parsedUser.id)
+            .single();
 
-        if (session) {
-          // Verify the user is still valid with the server
-          const { data: { user: verifiedUser }, error: userError } = await supabase.auth.getUser();
-          
-          if (userError) {
-            throw userError;
+          if (data && data.status === 'Active') {
+            setUser(data);
+          } else {
+            console.warn('Sessão inválida ou usuário inativo.');
+            localStorage.removeItem('app_user');
+            setUser(null);
+            if (pathname !== '/' && pathname !== '/registrar') {
+              router.push('/');
+            }
           }
-          
-          setUser(verifiedUser);
         } else {
           setUser(null);
-          if (pathname !== '/' && !['/painel', '/receitas', '/despesas', '/investimentos'].some(path => pathname.startsWith(path))) {
-            // Only redirect if we are on a protected route
-            // router.push('/');
+          if (pathname !== '/' && pathname !== '/registrar' && !['/painel', '/receitas', '/despesas', '/investimentos', '/orcamento'].some(path => pathname.startsWith(path))) {
+            // Keep current logic
+          } else if (['/painel', '/receitas', '/despesas', '/investimentos', '/orcamento'].some(path => pathname.startsWith(path))) {
+            router.push('/');
           }
         }
       } catch (err: any) {
-        const errorMessage = err.message || '';
-        if (
-          errorMessage.includes('Refresh Token Not Found') || 
-          errorMessage.includes('invalid_refresh_token') ||
-          errorMessage.includes('refresh_token_not_found')
-        ) {
-          console.warn('Sessão expirada ou inválida. Limpando dados...');
-          // Use a try-catch for signOut to avoid infinite loops if it fails
-          try {
-            await supabase.auth.signOut();
-          } catch (signOutErr) {
-            // If signOut fails, manually clear local storage as a fallback
-            if (typeof window !== 'undefined') {
-              localStorage.removeItem('supabase.auth.token');
-            }
-          }
-          setUser(null);
-          if (pathname !== '/') {
-            router.push('/');
-          }
-        } else {
-          console.error('Erro de autenticação:', errorMessage);
-        }
+        console.error('Erro de autenticação customizada:', err.message);
       } finally {
         setLoading(false);
       }
     };
 
     checkUser();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session) {
-        setUser(session.user);
-        setLoading(false);
-      } else if (event === 'SIGNED_OUT' || !session) {
-        setUser(null);
-        setLoading(false);
-        if (pathname !== '/') {
-          router.push('/');
-        }
-      }
-    });
-
-    return () => {
-      subscription.unsubscribe();
-    };
   }, [router, pathname]);
 
+  const login = (userData: AppUser) => {
+    localStorage.setItem('app_user', JSON.stringify(userData));
+    setUser(userData);
+    router.push('/painel');
+  };
+
   const signOut = async () => {
-    await supabase.auth.signOut();
+    localStorage.removeItem('app_user');
     setUser(null);
     router.push('/');
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signOut }}>
+    <AuthContext.Provider value={{ user, loading, login, signOut }}>
       {children}
     </AuthContext.Provider>
   );
