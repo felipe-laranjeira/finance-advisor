@@ -26,15 +26,15 @@ export function TransactionTable({ transactions, onDelete, onEdit }: Transaction
   const [activeMenu, setActiveMenu] = useState<string | null>(null);
 
   return (
-    <div className="bg-surface-container-lowest rounded-[2.5rem] overflow-hidden border border-outline-variant/10 shadow-sm">
-      <table className="w-full text-left border-collapse">
+    <div className="bg-surface-container-lowest rounded-[2rem] md:rounded-[2.5rem] overflow-hidden border border-outline-variant/10 shadow-sm overflow-x-auto">
+      <table className="w-full text-left border-collapse min-w-[600px]">
         <thead>
           <tr className="bg-surface-container-low/40">
-            <th className="px-10 py-6 text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70">Data</th>
-            <th className="px-10 py-6 text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70">Descrição</th>
-            <th className="px-10 py-6 text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70">Categoria</th>
-            <th className="px-10 py-6 text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70 text-right">Valor</th>
-            <th className="px-10 py-6 w-16"></th>
+            <th className="px-6 md:px-10 py-4 md:py-6 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70">Data</th>
+            <th className="px-6 md:px-10 py-4 md:py-6 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70">Descrição</th>
+            <th className="px-6 md:px-10 py-4 md:py-6 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70">Categoria</th>
+            <th className="px-6 md:px-10 py-4 md:py-6 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70 text-right">Valor</th>
+            <th className="px-6 md:px-10 py-4 md:py-6 w-16"></th>
           </tr>
         </thead>
         <tbody className="divide-y divide-outline-variant/5">
@@ -48,14 +48,14 @@ export function TransactionTable({ transactions, onDelete, onEdit }: Transaction
                 key={t.id} 
                 className="hover:bg-surface-container-low/50 transition-colors group cursor-pointer relative"
               >
-                <td className="px-10 py-6 text-sm font-semibold text-on-surface-variant">{formatDate(t.date)}</td>
-                <td className="px-10 py-6">
-                  <div className="font-bold text-on-surface text-base">{t.description}</div>
-                  {t.subtext && <div className="text-xs text-on-surface-variant font-medium mt-0.5">{t.subtext}</div>}
+                <td className="px-6 md:px-10 py-4 md:py-6 text-xs md:text-sm font-semibold text-on-surface-variant whitespace-nowrap">{formatDate(t.date)}</td>
+                <td className="px-6 md:px-10 py-4 md:py-6">
+                  <div className="font-bold text-on-surface text-sm md:text-base line-clamp-1">{t.description}</div>
+                  {t.subtext && <div className="text-[10px] md:text-xs text-on-surface-variant font-medium mt-0.5 line-clamp-1">{t.subtext}</div>}
                 </td>
-                <td className="px-10 py-6">
+                <td className="px-6 md:px-10 py-4 md:py-6 whitespace-nowrap">
                   <span className={cn(
-                    "px-4 py-1.5 rounded-full text-[11px] font-bold",
+                    "px-3 md:px-4 py-1 md:py-1.5 rounded-full text-[10px] md:text-[11px] font-bold",
                     t.category === 'Mercado' ? "bg-secondary-container text-on-secondary-container" : 
                     t.category === 'Entretenimento' ? "bg-tertiary-container text-on-tertiary-container" :
                     "bg-surface-container-highest text-on-surface-variant"
@@ -63,10 +63,10 @@ export function TransactionTable({ transactions, onDelete, onEdit }: Transaction
                     {t.category}
                   </span>
                 </td>
-                <td className="px-10 py-6 text-right font-headline font-black text-lg text-tertiary">
+                <td className="px-6 md:px-10 py-4 md:py-6 text-right font-headline font-black text-base md:text-lg text-tertiary whitespace-nowrap">
                   {formatCurrency(t.amount)}
                 </td>
-                <td className="px-10 py-6 text-right relative">
+                <td className="px-6 md:px-10 py-4 md:py-6 text-right relative">
                   <button 
                     onClick={(e) => {
                       e.stopPropagation();
@@ -74,7 +74,7 @@ export function TransactionTable({ transactions, onDelete, onEdit }: Transaction
                     }}
                     className="text-on-surface-variant hover:text-primary transition-colors p-2 rounded-full hover:bg-surface-container-high"
                   >
-                    <MoreVertical size={20} />
+                    <MoreVertical className="w-[18px] h-[18px] md:w-[20px] md:h-[20px]" />
                   </button>
 
                   <AnimatePresence>

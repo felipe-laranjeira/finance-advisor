@@ -453,7 +453,7 @@ export default function Page() {
     <div className="flex min-h-screen">
       <Sidebar />
       
-      <main className="flex-1 ml-64 bg-surface min-h-screen pb-20">
+      <main className="flex-1 lg:ml-64 bg-surface min-h-screen pb-20">
         <TopBar />
         
         {!isSupabaseConfigured && (
@@ -468,27 +468,27 @@ export default function Page() {
           </div>
         )}
 
-        <div className="p-12 max-w-7xl mx-auto">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-16">
+        <div className="p-4 md:p-12 max-w-7xl mx-auto">
+          <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-12 md:mb-16">
             <div>
-              <h2 className="text-5xl font-black text-on-surface font-headline tracking-tight mb-3">Receitas</h2>
-              <p className="text-on-surface-variant text-lg font-medium">Gestão de suas entradas financeiras e rendimentos.</p>
+              <h2 className="text-3xl md:text-5xl font-black text-on-surface font-headline tracking-tight mb-3">Receitas</h2>
+              <p className="text-on-surface-variant text-base md:text-lg font-medium">Gestão de suas entradas financeiras e rendimentos.</p>
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
               <button 
                 onClick={() => {
                   setEditingTransaction(null);
                   setIsModalOpen(true);
                 }}
-                className="px-8 py-3.5 rounded-2xl bg-primary text-on-primary font-bold flex items-center gap-2.5 shadow-lg shadow-primary/20 hover:opacity-90 transition-all"
+                className="px-6 md:px-8 py-3 md:py-3.5 rounded-2xl bg-primary text-on-primary font-bold flex items-center justify-center gap-2.5 shadow-lg shadow-primary/20 hover:opacity-90 transition-all"
               >
                 <Plus size={20} />
-                Adicionar Receita
+                <span className="text-sm md:text-base">Adicionar</span>
               </button>
-              <button className="px-8 py-3.5 rounded-2xl bg-surface-container-lowest text-on-surface font-bold flex items-center gap-2.5 border border-outline-variant/10 hover:bg-surface-container-low transition-all shadow-sm">
+              <button className="px-6 md:px-8 py-3 md:py-3.5 rounded-2xl bg-surface-container-lowest text-on-surface font-bold flex items-center justify-center gap-2.5 border border-outline-variant/10 hover:bg-surface-container-low transition-all shadow-sm">
                 <Filter size={18} />
-                Filtros
+                <span className="text-sm md:text-base">Filtros</span>
               </button>
             </div>
           </div>

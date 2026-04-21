@@ -291,7 +291,7 @@ export default function DashboardPage() {
   return (
     <div className="flex min-h-screen bg-surface font-body text-on-surface">
       <Sidebar />
-      <main className="flex-1 ml-64 flex flex-col">
+      <main className="flex-1 lg:ml-64 flex flex-col">
         <TopBar />
         
         {!isSupabaseConfigured && (
@@ -306,15 +306,15 @@ export default function DashboardPage() {
           </div>
         )}
 
-        <div className="p-8 space-y-8 max-w-7xl mx-auto w-full">
+        <div className="p-4 md:p-8 space-y-6 md:space-y-8 max-w-7xl mx-auto w-full">
           {/* Header with Month Selector */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-              <h1 className="text-3xl font-black font-headline text-primary tracking-tight">Painel Financeiro</h1>
-              <p className="text-on-surface-variant font-medium">Visão geral da sua saúde financeira</p>
+              <h1 className="text-2xl md:text-3xl font-black font-headline text-primary tracking-tight">Painel Financeiro</h1>
+              <p className="text-sm md:text-base text-on-surface-variant font-medium">Visão geral da sua saúde financeira</p>
             </div>
             
-            <div className="flex items-center gap-3 bg-surface-container-low p-2 rounded-2xl border border-outline-variant/10">
+            <div className="flex items-center gap-3 bg-surface-container-low p-2 rounded-2xl border border-outline-variant/10 w-full md:w-auto">
               <Calendar size={18} className="text-on-surface-variant ml-2" />
               <select 
                 value={selectedMonth}
@@ -369,9 +369,9 @@ export default function DashboardPage() {
           )}
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {/* Income Card */}
-            <div className="bg-surface-container-lowest p-8 rounded-[2.5rem] border border-outline-variant/10 shadow-sm relative overflow-hidden group">
+            <div className="bg-surface-container-lowest p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-outline-variant/10 shadow-sm relative overflow-hidden group">
               <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
                 <TrendingUp size={80} className="text-secondary" />
               </div>
@@ -402,7 +402,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Expense Card */}
-            <div className="bg-surface-container-lowest p-8 rounded-[2.5rem] border border-outline-variant/10 shadow-sm relative overflow-hidden group">
+            <div className="bg-surface-container-lowest p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-outline-variant/10 shadow-sm relative overflow-hidden group">
               <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
                 <TrendingDown size={80} className="text-tertiary" />
               </div>
@@ -433,7 +433,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Balance Card */}
-            <div className="bg-primary p-8 rounded-[2.5rem] shadow-xl shadow-primary/20 relative overflow-hidden group">
+            <div className="bg-primary p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] shadow-xl shadow-primary/20 relative overflow-hidden group">
               <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
                 <DollarSign size={80} className="text-white" />
               </div>

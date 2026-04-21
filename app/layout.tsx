@@ -18,6 +18,7 @@ export const metadata: Metadata = {
 };
 
 import { AuthProvider } from '@/components/AuthProvider';
+import { SidebarProvider } from '@/components/SidebarContext';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -27,7 +28,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       </head>
       <body suppressHydrationWarning className="bg-[#f7f9fc] text-[#191c1e] antialiased">
         <AuthProvider>
-          {children}
+          <SidebarProvider>
+            {children}
+          </SidebarProvider>
         </AuthProvider>
       </body>
     </html>

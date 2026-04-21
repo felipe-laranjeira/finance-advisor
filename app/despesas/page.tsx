@@ -660,7 +660,7 @@ Responda de forma direta, profissional e empática, em português do Brasil. Use
     <div className="flex min-h-screen">
       <Sidebar />
       
-      <main className="flex-1 ml-64 bg-surface min-h-screen pb-20">
+      <main className="flex-1 lg:ml-64 bg-surface min-h-screen pb-20">
         <TopBar />
         
         {!isSupabaseConfigured && (
@@ -675,52 +675,52 @@ Responda de forma direta, profissional e empática, em português do Brasil. Use
           </div>
         )}
 
-        <div className="p-12 max-w-7xl mx-auto">
+        <div className="p-4 md:p-12 max-w-7xl mx-auto">
           {/* Hero Header */}
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-16">
+          <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-8 mb-12 md:mb-16">
             <div>
-              <h2 className="text-5xl font-black text-on-surface font-headline tracking-tight mb-3">Despesas</h2>
-              <p className="text-on-surface-variant text-lg font-medium">Acompanhamento abrangente de suas saídas fiscais e compromissos.</p>
+              <h2 className="text-3xl md:text-5xl font-black text-on-surface font-headline tracking-tight mb-3">Despesas</h2>
+              <p className="text-on-surface-variant text-base md:text-lg font-medium">Acompanhamento abrangente de suas saídas fiscais e compromissos.</p>
             </div>
             
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-4">
               <button 
                 onClick={() => {
                   setEditingTransaction(null);
                   setIsModalOpen(true);
                 }}
-                className="px-8 py-3.5 rounded-2xl bg-primary text-on-primary font-bold flex items-center gap-2.5 shadow-lg shadow-primary/20 hover:opacity-90 transition-all"
+                className="px-6 md:px-8 py-3 md:py-3.5 rounded-2xl bg-primary text-on-primary font-bold flex items-center justify-center gap-2.5 shadow-lg shadow-primary/20 hover:opacity-90 transition-all"
               >
                 <Plus size={20} />
-                Adicionar Despesa
+                <span className="whitespace-nowrap text-sm md:text-base">Adicionar</span>
               </button>
               <div className="flex bg-surface-container-high p-1.5 rounded-2xl shadow-inner">
                 <button 
                   onClick={() => setActiveTab('table')}
                   className={cn(
-                    "px-6 py-2.5 rounded-xl text-sm font-bold transition-all",
+                    "px-4 md:px-6 py-2 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all",
                     activeTab === 'table' 
                       ? "bg-surface-container-lowest shadow-md text-primary" 
                       : "text-on-surface-variant hover:text-on-surface"
                   )}
                 >
-                  Vista em Tabela
+                  Tabela
                 </button>
                 <button 
                   onClick={() => setActiveTab('insights')}
                   className={cn(
-                    "px-6 py-2.5 rounded-xl text-sm font-bold transition-all",
+                    "px-4 md:px-6 py-2 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all",
                     activeTab === 'insights' 
                       ? "bg-surface-container-lowest shadow-md text-primary" 
                       : "text-on-surface-variant hover:text-on-surface"
                   )}
                 >
-                  Monitor de Gastos Recorrentes
+                  Insights
                 </button>
               </div>
-              <button className="px-8 py-3.5 rounded-2xl bg-surface-container-lowest text-on-surface font-bold flex items-center gap-2.5 border border-outline-variant/10 hover:bg-surface-container-low transition-all shadow-sm">
+              <button className="px-6 md:px-8 py-3 md:py-3.5 rounded-2xl bg-surface-container-lowest text-on-surface font-bold flex items-center justify-center gap-2.5 border border-outline-variant/10 hover:bg-surface-container-low transition-all shadow-sm">
                 <Filter size={18} />
-                Filtros
+                <span className="text-sm md:text-base">Filtros</span>
               </button>
             </div>
           </div>
@@ -734,13 +734,13 @@ Responda de forma direta, profissional e empática, em português do Brasil. Use
           {activeTab === 'table' ? (
             <>
               {/* Filters & Controls */}
-              <div className="flex flex-wrap items-center gap-5 mb-8 px-2">
-                <div className="flex items-center gap-3 px-6 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5">
+              <div className="flex flex-wrap items-center gap-4 md:gap-5 mb-8 px-2">
+                <div className="flex items-center gap-3 px-5 md:px-6 py-2.5 md:py-3 bg-surface-container-low rounded-full text-xs md:text-sm font-bold text-on-surface-variant border border-outline-variant/5">
                   <Calendar size={18} className="text-primary" />
                   <select 
                     value={selectedMonthYear}
                     onChange={(e) => setSelectedMonthYear(e.target.value)}
-                    className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer"
+                    className="bg-transparent border-none focus:ring-0 p-0 text-xs md:text-sm font-bold cursor-pointer"
                   >
                     <option value="Todos">Todos os Meses</option>
                     {availableMonths.map(month => (
@@ -749,12 +749,12 @@ Responda de forma direta, profissional e empática, em português do Brasil. Use
                   </select>
                 </div>
                 
-                <div className="flex items-center gap-3 px-6 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5">
+                <div className="flex items-center gap-3 px-5 md:px-6 py-2.5 md:py-3 bg-surface-container-low rounded-full text-xs md:text-sm font-bold text-on-surface-variant border border-outline-variant/5">
                   <Tag size={18} className="text-primary" />
                   <select 
                     value={selectedCategory}
                     onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer"
+                    className="bg-transparent border-none focus:ring-0 p-0 text-xs md:text-sm font-bold cursor-pointer"
                   >
                     <option value="Todas as Categorias">Todas as Categorias</option>
                     {categories.map(cat => (
@@ -763,9 +763,9 @@ Responda de forma direta, profissional e empática, em português do Brasil. Use
                   </select>
                 </div>
                 
-                <div className="ml-auto flex items-center gap-4">
+                <div className="w-full xl:w-auto xl:ml-auto flex items-center justify-between xl:justify-start gap-6">
                   <label className={cn(
-                    "flex items-center gap-2.5 text-primary font-black text-sm hover:underline cursor-pointer transition-all group",
+                    "flex items-center gap-2.5 text-primary font-black text-xs md:text-sm hover:underline cursor-pointer transition-all group",
                     isImporting && "opacity-50 cursor-not-allowed pointer-events-none"
                   )}>
                     {isImporting ? (
