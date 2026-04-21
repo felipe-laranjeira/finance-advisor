@@ -249,7 +249,11 @@ export default function BudgetPage() {
                               </div>
                             ) : (
                               <button 
-                                onClick={() => setEditingLimit({ id: item.id, value: item.limit === 0 ? '' : item.limit.toString() })}
+                                onClick={() => {
+                                  // Clear field if 0, otherwise show current value
+                                  const val = item.limit === 0 ? '' : item.limit.toString();
+                                  setEditingLimit({ id: item.id, value: val });
+                                }}
                                 className="text-base font-black text-on-surface hover:text-primary transition-colors flex items-center gap-2 group/btn"
                               >
                                 {formatCurrency(item.limit)}

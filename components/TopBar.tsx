@@ -1,10 +1,13 @@
 'use client';
 
 import React from 'react';
-import { Search, Bell, Wallet } from 'lucide-react';
+import { Search, Bell, Wallet, User as UserIcon } from 'lucide-react';
 import Image from 'next/image';
+import { useAuth } from '@/components/AuthProvider';
 
 export function TopBar() {
+  const { user } = useAuth();
+
   return (
     <header className="w-full h-20 flex items-center justify-between px-10 sticky top-0 z-40 glass border-b border-outline-variant/5">
       <div className="flex items-center gap-6">
@@ -21,6 +24,11 @@ export function TopBar() {
       </div>
       
       <div className="flex items-center gap-5">
+        <div className="hidden md:block mr-2">
+          <p className="text-sm font-bold text-on-surface leading-tight">{user?.name || 'Usuário'}</p>
+          <p className="text-[10px] text-on-surface-variant uppercase tracking-widest font-bold">Logado</p>
+        </div>
+        
         <button className="p-2.5 rounded-full hover:bg-surface-container-highest transition-colors relative text-on-surface-variant">
           <Bell size={20} />
           <span className="absolute top-2.5 right-2.5 w-2 h-2 bg-tertiary rounded-full border-2 border-white"></span>
@@ -29,14 +37,18 @@ export function TopBar() {
           <Wallet size={20} />
         </button>
         <div className="h-10 w-10 rounded-full bg-primary/5 flex items-center justify-center ml-2 border border-outline-variant/20 overflow-hidden cursor-pointer hover:ring-2 hover:ring-primary/10 transition-all">
-          <Image 
-            alt="Avatar do usuário" 
-            className="w-full h-full object-cover" 
-            src="https://picsum.photos/seed/user/100/100"
-            width={40}
-            height={40}
-            referrerPolicy="no-referrer"
-          />
+          {user?.photo_url ? (
+            <Image 
+              alt="Avatar do usuário" 
+              className="w-full h-full object-cover" 
+              src={user.photo_url}
+              width={40}
+              height={40}
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <UserIcon size={20} className="text-primary" />
+          )}
         </div>
       </div>
     </header>

@@ -233,28 +233,36 @@ export default function Page() {
     if (!user) return;
 
     // Find category ID
-    const { data: catData } = await supabase
+    const { data: catData, error: catFetchError } = await supabase
       .from('categories')
       .select('id')
       .eq('name', data.category)
-      .single();
+      .maybeSingle();
+
+    if (catFetchError) {
+      console.warn('Error fetching category:', catFetchError);
+    }
 
     const payload = {
       description: data.description,
       amount: data.amount,
       date: data.date.toISOString().split('T')[0],
-      category_id: catData?.id,
-      user_id: user!.id,
+      category_id: catData?.id || null,
+      user_id: user.id,
     };
+
+    console.log('Saving transaction payload:', payload);
 
     if (data.id) {
       const { error } = await supabase
         .from('transactions')
         .update(payload)
         .eq('id', data.id)
-        .eq('user_id', user!.id);
+        .eq('user_id', user.id);
+      
       if (error) {
         console.error('Error updating:', error);
+        alert(`Erro ao atualizar despesa: ${error.message}\nDetalhes: ${error.details}`);
       } else if (catData?.id) {
         // Save/Update category instruction for learning
         await supabase
@@ -272,6 +280,7 @@ export default function Page() {
         .insert([payload]);
       if (error) {
         console.error('Error inserting:', error);
+        alert(`Erro ao salvar despesa: ${error.message}\nDetalhes: ${error.details}\nDica: ${error.hint}`);
       } else if (catData?.id) {
         // Save category instruction for learning
         await supabase
@@ -576,6 +585,7 @@ ${JSON.stringify(inputContext, null, 2)}`;
       const { data, error } = await supabase
         .from('transactions')
         .select('*')
+        .eq('user_id', user!.id)
         .gte('date', startDate.toISOString().split('T')[0])
         .order('date', { ascending: false });
 

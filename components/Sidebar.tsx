@@ -16,6 +16,7 @@ import { motion } from 'motion/react';
 
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/components/AuthProvider';
 import Link from 'next/link';
 
 const menuItems = [
@@ -30,10 +31,10 @@ const menuItems = [
 export function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
+  const { signOut } = useAuth();
 
   const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push('/');
+    await signOut();
   };
 
   return (
