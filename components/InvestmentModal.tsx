@@ -104,7 +104,7 @@ export function InvestmentModal({ isOpen, onClose, onSave, editingInvestment }: 
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-xs font-black uppercase tracking-widest text-on-surface-variant ml-1">Corretora</label>
                     <div className="relative">
@@ -136,7 +136,7 @@ export function InvestmentModal({ isOpen, onClose, onSave, editingInvestment }: 
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-xs font-black uppercase tracking-widest text-on-surface-variant ml-1">Saldo Atual</label>
                     <div className="relative">

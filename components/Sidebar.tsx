@@ -15,9 +15,7 @@ import { cn } from '@/lib/utils';
 import { motion } from 'motion/react';
 
 import { useRouter, usePathname } from 'next/navigation';
-import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthProvider';
-import { useSidebar } from '@/components/SidebarContext';
 import Link from 'next/link';
 
 const menuItems = [
@@ -33,27 +31,14 @@ export function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
   const { signOut } = useAuth();
-  const { isOpen, setIsOpen } = useSidebar();
 
   const handleLogout = async () => {
     await signOut();
   };
 
   return (
-    <>
-      {/* Mobile Overlay */}
-      {isOpen && (
-        <div 
-          className="fixed inset-0 bg-on-surface/40 backdrop-blur-sm z-[45] lg:hidden"
-          onClick={() => setIsOpen(false)}
-        />
-      )}
-
-      <aside className={cn(
-        "h-screen w-64 fixed left-0 top-0 flex flex-col bg-surface-container-low border-r border-outline-variant/10 z-50 transition-transform duration-300 ease-in-out lg:translate-x-0",
-        isOpen ? "translate-x-0" : "-translate-x-full"
-      )}>
-        <div className="flex flex-col h-full py-8 px-4">
+    <aside className="h-screen w-64 fixed left-0 top-0 hidden lg:flex flex-col bg-surface-container-low border-r border-outline-variant/10 z-50">
+      <div className="flex flex-col h-full py-8 px-4">
           {/* Brand Section */}
           <div className="mb-10 px-4 flex justify-between items-center">
             <div>
@@ -72,7 +57,6 @@ export function Sidebar() {
                 <Link
                   key={item.label}
                   href={item.href}
-                  onClick={() => setIsOpen(false)}
                   className={cn(
                     "flex items-center gap-3 px-4 py-3 transition-all duration-200 rounded-xl text-sm font-medium",
                     isActive 
@@ -103,6 +87,5 @@ export function Sidebar() {
           </div>
         </div>
       </aside>
-    </>
-  );
+    );
 }

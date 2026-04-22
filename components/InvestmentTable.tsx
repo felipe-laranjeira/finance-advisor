@@ -22,8 +22,77 @@ interface InvestmentTableProps {
 
 export function InvestmentTable({ investments, onDelete, onEdit }: InvestmentTableProps) {
   return (
-    <div className="bg-surface-container-lowest rounded-[2.5rem] border border-outline-variant/10 overflow-hidden shadow-sm">
-      <div className="overflow-x-auto">
+    <div className="bg-transparent md:bg-surface-container-lowest md:rounded-[2.5rem] md:border md:border-outline-variant/10 md:overflow-hidden md:shadow-sm">
+      {/* Mobile Assets View */}
+      <div className="flex flex-col gap-4 md:hidden">
+        {investments.map((investment) => (
+          <div 
+            key={investment.id} 
+            className="bg-surface-container-lowest p-5 rounded-[1.5rem] border border-outline-variant/10 shadow-sm active:scale-[0.98] transition-all"
+            onClick={() => onEdit(investment)}
+          >
+            <div className="flex justify-between items-start gap-4 mb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                  <TrendingUp size={18} />
+                </div>
+                <div>
+                  <h4 className="font-black text-on-surface text-base tracking-tight leading-tight uppercase">
+                    {investment.asset_name}
+                  </h4>
+                  <div className="flex items-center gap-1 text-on-surface-variant text-[10px] font-bold mt-0.5">
+                    <Landmark size={10} />
+                    {investment.broker}
+                  </div>
+                </div>
+              </div>
+              <div className="text-right">
+                <div className="text-lg font-black text-primary font-headline leading-tight">
+                  {formatCurrency(investment.balance)}
+                </div>
+                <div className="mt-1 flex justify-end">
+                  <span className={cn(
+                    "px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-wider",
+                    investment.asset_type === 'Ações' ? "bg-blue-100 text-blue-700 font-black" :
+                    investment.asset_type === 'FIIs' ? "bg-purple-100 text-purple-700 font-black" :
+                    investment.asset_type === 'Renda Fixa' ? "bg-green-100 text-green-700 font-black" :
+                    investment.asset_type === 'Tesouro' ? "bg-orange-100 text-orange-700 font-black" :
+                    "bg-gray-100 text-gray-700 font-black"
+                  )}>
+                    {investment.asset_type}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-3 border-t border-outline-variant/5">
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit(investment);
+                }}
+                className="w-11 h-11 flex items-center justify-center rounded-xl bg-surface-container-low text-on-surface-variant active:bg-surface-container-high transition-colors"
+                aria-label="Editar"
+              >
+                <Edit2 size={18} />
+              </button>
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(investment.id);
+                }}
+                className="w-11 h-11 flex items-center justify-center rounded-xl bg-tertiary/10 text-tertiary active:bg-tertiary/20 transition-colors"
+                aria-label="Excluir"
+              >
+                <Trash2 size={18} />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop Table View */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-outline-variant/5">
@@ -71,14 +140,14 @@ export function InvestmentTable({ investments, onDelete, onEdit }: InvestmentTab
                   <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
                       onClick={() => onEdit(investment)}
-                      className="p-2 rounded-xl hover:bg-primary/10 text-primary transition-colors"
+                      className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-primary/10 text-primary transition-colors"
                       title="Editar"
                     >
                       <Edit2 size={18} />
                     </button>
                     <button 
                       onClick={() => onDelete(investment.id)}
-                      className="p-2 rounded-xl hover:bg-error/10 text-error transition-colors"
+                      className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-error/10 text-error transition-colors"
                       title="Excluir"
                     >
                       <Trash2 size={18} />

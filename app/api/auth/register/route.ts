@@ -4,7 +4,8 @@ import bcrypt from 'bcryptjs';
 
 export async function POST(request: Request) {
   try {
-    const { name, email, password } = await request.json();
+    const { name, email: rawEmail, password } = await request.json();
+    const email = rawEmail?.toLowerCase();
 
     if (!name || !email || !password) {
       return NextResponse.json({ error: 'Todos os campos são obrigatórios' }, { status: 400 });

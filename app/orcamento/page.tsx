@@ -201,94 +201,168 @@ export default function BudgetPage() {
               </div>
             </div>
             
-            <div className="overflow-x-auto">
+            <div className="">
               {loading ? (
                 <div className="py-20 flex flex-col items-center gap-4">
                   <Loader2 className="animate-spin text-primary" size={32} />
                   <span className="text-on-surface-variant font-medium">Carregando categorias...</span>
                 </div>
               ) : (
-                <table className="w-full text-left border-collapse min-w-[500px]">
-                  <thead>
-                    <tr className="bg-surface-container-highest/30">
-                      <th className="px-6 md:px-8 py-4 md:py-5 text-[10px] md:text-xs font-black uppercase tracking-widest text-on-surface-variant">Categoria</th>
-                      <th className="px-6 md:px-8 py-4 md:py-5 text-[10px] md:text-xs font-black uppercase tracking-widest text-on-surface-variant">Limite de Gasto</th>
-                      <th className="px-6 md:px-8 py-4 md:py-5 text-[10px] md:text-xs font-black uppercase tracking-widest text-on-surface-variant">% do Total</th>
-                      <th className="px-6 md:px-8 py-4 md:py-5 text-[10px] md:text-xs font-black uppercase tracking-widest text-on-surface-variant text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <>
+                  {/* Mobile View */}
+                  <div className="md:hidden flex flex-col divide-y divide-outline-variant/10">
                     <AnimatePresence>
                       {budgetWithPercentages.map((item, index) => (
-                        <motion.tr 
+                        <motion.div
                           key={item.id}
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: index * 0.05 }}
-                          className="border-b border-outline-variant/5 last:border-0 hover:bg-surface-container-lowest/50 transition-all group"
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          className="p-5 flex flex-col gap-4"
                         >
-                          <td className="px-6 md:px-8 py-4 md:py-6">
-                            <span className="text-sm md:text-base font-bold text-on-surface">{item.name}</span>
-                          </td>
-                          <td className="px-6 md:px-8 py-4 md:py-6 relative">
-                            {editingLimit?.id === item.id ? (
-                              <div className="flex items-center gap-2">
-                                <span className="text-primary font-bold text-xs md:text-sm">R$</span>
-                                <input
-                                  autoFocus
-                                  type="text"
-                                  value={editingLimit.value}
-                                  onChange={(e) => handleInputChange(item.id, e.target.value)}
-                                  onBlur={() => handleBlur(item.id)}
-                                  onKeyDown={(e) => {
-                                    if (e.key === 'Enter') handleBlur(item.id);
-                                    if (e.key === 'Escape') setEditingLimit(null);
-                                  }}
-                                  className="bg-surface-container-highest border-2 border-primary rounded-xl px-2 md:px-3 py-1 md:py-1.5 w-24 md:w-32 outline-none font-black text-xs md:text-sm text-on-surface shadow-lg"
-                                />
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <h4 className="font-bold text-on-surface text-base">{item.name}</h4>
+                              <div className="flex items-center gap-2 mt-1">
+                                <div className="w-16 h-1.5 bg-surface-container-highest rounded-full overflow-hidden">
+                                  <motion.div 
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${item.percentage}%` }}
+                                    className="h-full bg-primary"
+                                  />
+                                </div>
+                                <span className="text-[10px] font-black text-on-surface-variant">
+                                  {item.percentage.toFixed(1)}% do total
+                                </span>
                               </div>
-                            ) : (
-                              <button 
-                                onClick={() => {
-                                  // Clear field if 0, otherwise show current value
-                                  const val = item.limit === 0 ? '' : item.limit.toString();
-                                  setEditingLimit({ id: item.id, value: val });
-                                }}
-                                className="text-sm md:text-base font-black text-on-surface hover:text-primary transition-colors flex items-center gap-2 group/btn"
-                              >
-                                {formatCurrency(item.limit)}
-                                <Plus size={14} className="opacity-0 lg:group-hover/btn:opacity-100 transition-opacity" />
-                              </button>
-                            )}
-                          </td>
-                          <td className="px-6 md:px-8 py-4 md:py-6">
-                            <div className="flex items-center gap-4">
-                              <div className="flex-1 h-2 bg-surface-container-highest rounded-full overflow-hidden max-w-[80px] md:max-w-[120px]">
-                                <motion.div 
-                                  initial={{ width: 0 }}
-                                  animate={{ width: `${item.percentage}%` }}
-                                  className="h-full bg-primary"
-                                />
-                              </div>
-                              <span className="text-[10px] md:text-sm font-black text-on-surface-variant">
-                                {item.percentage.toFixed(1)}%
-                              </span>
                             </div>
-                          </td>
-                          <td className="px-6 md:px-8 py-4 md:py-6 text-right">
-                            {saving === item.id ? (
-                              <Loader2 className="w-4 h-4 md:w-[18px] md:h-[18px] animate-spin text-primary ml-auto" />
-                            ) : item.limit > 0 ? (
-                              <CheckCircle2 className="w-4 h-4 md:w-[18px] md:h-[18px] text-primary ml-auto opacity-40" />
-                            ) : (
-                              <div className="w-18 ml-auto" />
-                            )}
-                          </td>
-                        </motion.tr>
+                            
+                            <div className="flex flex-col items-end">
+                              {editingLimit?.id === item.id ? (
+                                <div className="flex items-center gap-2">
+                                  <span className="text-primary font-bold text-xs">R$</span>
+                                  <input
+                                    autoFocus
+                                    type="text"
+                                    value={editingLimit.value}
+                                    onChange={(e) => handleInputChange(item.id, e.target.value)}
+                                    onBlur={() => handleBlur(item.id)}
+                                    onKeyDown={(e) => {
+                                      if (e.key === 'Enter') handleBlur(item.id);
+                                      if (e.key === 'Escape') setEditingLimit(null);
+                                    }}
+                                    className="bg-surface-container-highest border-2 border-primary rounded-xl px-2 py-1.5 w-24 outline-none font-black text-xs text-on-surface shadow-md"
+                                  />
+                                </div>
+                              ) : (
+                                <button 
+                                  onClick={() => {
+                                    const val = item.limit === 0 ? '' : item.limit.toString();
+                                    setEditingLimit({ id: item.id, value: val });
+                                  }}
+                                  className="text-lg font-black text-primary flex items-center gap-1 active:scale-95 transition-transform"
+                                >
+                                  {formatCurrency(item.limit)}
+                                </button>
+                              )}
+                              <div className="mt-1">
+                                {saving === item.id ? (
+                                  <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                                ) : item.limit > 0 ? (
+                                  <CheckCircle2 className="w-4 h-4 text-primary opacity-40" />
+                                ) : null}
+                              </div>
+                            </div>
+                          </div>
+                        </motion.div>
                       ))}
                     </AnimatePresence>
-                  </tbody>
-                </table>
+                  </div>
+
+                  {/* Desktop View */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-left border-collapse min-w-[500px]">
+                      <thead>
+                        <tr className="bg-surface-container-highest/30">
+                          <th className="px-6 md:px-8 py-4 md:py-5 text-[10px] md:text-xs font-black uppercase tracking-widest text-on-surface-variant">Categoria</th>
+                          <th className="px-6 md:px-8 py-4 md:py-5 text-[10px] md:text-xs font-black uppercase tracking-widest text-on-surface-variant">Limite de Gasto</th>
+                          <th className="px-6 md:px-8 py-4 md:py-5 text-[10px] md:text-xs font-black uppercase tracking-widest text-on-surface-variant">% do Total</th>
+                          <th className="px-6 md:px-8 py-4 md:py-5 text-[10px] md:text-xs font-black uppercase tracking-widest text-on-surface-variant text-right">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <AnimatePresence>
+                          {budgetWithPercentages.map((item, index) => (
+                            <motion.tr 
+                              key={item.id}
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: index * 0.05 }}
+                              className="border-b border-outline-variant/5 last:border-0 hover:bg-surface-container-lowest/50 transition-all group"
+                            >
+                              <td className="px-6 md:px-8 py-4 md:py-6">
+                                <span className="text-sm md:text-base font-bold text-on-surface">{item.name}</span>
+                              </td>
+                              <td className="px-6 md:px-8 py-4 md:py-6 relative">
+                                {editingLimit?.id === item.id ? (
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-primary font-bold text-xs md:text-sm">R$</span>
+                                    <input
+                                      autoFocus
+                                      type="text"
+                                      value={editingLimit.value}
+                                      onChange={(e) => handleInputChange(item.id, e.target.value)}
+                                      onBlur={() => handleBlur(item.id)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') handleBlur(item.id);
+                                        if (e.key === 'Escape') setEditingLimit(null);
+                                      }}
+                                      className="bg-surface-container-highest border-2 border-primary rounded-xl px-2 md:px-3 py-1 md:py-1.5 w-24 md:w-32 outline-none font-black text-xs md:text-sm text-on-surface shadow-lg"
+                                    />
+                                  </div>
+                                ) : (
+                                  <button 
+                                    onClick={() => {
+                                      // Clear field if 0, otherwise show current value
+                                      const val = item.limit === 0 ? '' : item.limit.toString();
+                                      setEditingLimit({ id: item.id, value: val });
+                                    }}
+                                    className="text-sm md:text-base font-black text-on-surface hover:text-primary transition-colors flex items-center gap-2 group/btn"
+                                  >
+                                    {formatCurrency(item.limit)}
+                                    <Plus size={14} className="opacity-0 lg:group-hover/btn:opacity-100 transition-opacity" />
+                                  </button>
+                                )}
+                              </td>
+                              <td className="px-6 md:px-8 py-4 md:py-6">
+                                <div className="flex items-center gap-4">
+                                  <div className="flex-1 h-2 bg-surface-container-highest rounded-full overflow-hidden max-w-[80px] md:max-w-[120px]">
+                                    <motion.div 
+                                      initial={{ width: 0 }}
+                                      animate={{ width: `${item.percentage}%` }}
+                                      className="h-full bg-primary"
+                                    />
+                                  </div>
+                                  <span className="text-[10px] md:text-sm font-black text-on-surface-variant">
+                                    {item.percentage.toFixed(1)}%
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-6 md:px-8 py-4 md:py-6 text-right">
+                                {saving === item.id ? (
+                                  <Loader2 className="w-4 h-4 md:w-[18px] md:h-[18px] animate-spin text-primary ml-auto" />
+                                ) : item.limit > 0 ? (
+                                  <CheckCircle2 className="w-4 h-4 md:w-[18px] md:h-[18px] text-primary ml-auto opacity-40" />
+                                ) : (
+                                  <div className="w-18 ml-auto" />
+                                )}
+                              </td>
+                            </motion.tr>
+                          ))}
+                        </AnimatePresence>
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
             

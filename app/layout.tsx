@@ -18,7 +18,7 @@ export const metadata: Metadata = {
 };
 
 import { AuthProvider } from '@/components/AuthProvider';
-import { SidebarProvider } from '@/components/SidebarContext';
+import { BottomNavbar } from '@/components/BottomNavbar';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -26,11 +26,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
       </head>
-      <body suppressHydrationWarning className="bg-[#f7f9fc] text-[#191c1e] antialiased">
+      <body suppressHydrationWarning className="bg-[#f7f9fc] text-[#191c1e] antialiased pb-20 lg:pb-0">
         <AuthProvider>
-          <SidebarProvider>
-            {children}
-          </SidebarProvider>
+          {children}
+          <BottomNavbar />
         </AuthProvider>
       </body>
     </html>
