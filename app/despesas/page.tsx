@@ -676,55 +676,98 @@ Responda de forma direta, profissional e empática, em português do Brasil. Use
         )}
 
         <div className="p-4 md:p-12 max-w-7xl mx-auto">
-          {/* Hero Header */}
-          <div className="flex flex-col xl:flex-row xl:items-end justify-between gap-8 mb-12 md:mb-16">
-            <div>
-              <h2 className="text-3xl md:text-5xl font-black text-on-surface font-headline tracking-tight mb-3">Despesas</h2>
-              <p className="text-on-surface-variant text-base md:text-lg font-medium">Acompanhamento abrangente de suas saídas fiscais e compromissos.</p>
+          {/* 1. Titulo e Sub-Título */}
+          <div className="mb-8">
+            <h2 className="text-3xl md:text-5xl font-black text-on-surface font-headline tracking-tight mb-2">Despesas</h2>
+            <p className="text-on-surface-variant text-base md:text-lg font-medium opacity-80">Acompanhamento abrangente de suas saídas fiscais e compromissos.</p>
+          </div>
+
+          {/* 2. Botão para adicionar e importar (incluindo modo de exibição) */}
+          <div className="flex flex-wrap items-center gap-4 mb-8">
+            <button 
+              onClick={() => {
+                setEditingTransaction(null);
+                setIsModalOpen(true);
+              }}
+              className="px-6 md:px-8 py-3.5 rounded-2xl bg-primary text-on-primary font-bold flex items-center justify-center gap-2.5 shadow-lg shadow-primary/20 hover:opacity-90 transition-all active:scale-95"
+            >
+              <Plus size={20} />
+              <span className="whitespace-nowrap text-sm md:text-base">Adicionar</span>
+            </button>
+
+            <div className="flex bg-surface-container-high p-1.5 rounded-2xl shadow-inner">
+              <button 
+                onClick={() => setActiveTab('table')}
+                className={cn(
+                  "px-4 md:px-6 py-2 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all",
+                  activeTab === 'table' 
+                    ? "bg-surface-container-lowest shadow-md text-primary" 
+                    : "text-on-surface-variant hover:text-on-surface"
+                )}
+              >
+                Tabela
+              </button>
+              <button 
+                onClick={() => setActiveTab('insights')}
+                className={cn(
+                  "px-4 md:px-6 py-2 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all",
+                  activeTab === 'insights' 
+                    ? "bg-surface-container-lowest shadow-md text-primary" 
+                    : "text-on-surface-variant hover:text-on-surface"
+                )}
+              >
+                Insights
+              </button>
             </div>
             
-            <div className="flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-4">
-              <button 
-                onClick={() => {
-                  setEditingTransaction(null);
-                  setIsModalOpen(true);
-                }}
-                className="px-6 md:px-8 py-3 md:py-3.5 rounded-2xl bg-primary text-on-primary font-bold flex items-center justify-center gap-2.5 shadow-lg shadow-primary/20 hover:opacity-90 transition-all"
+            <label className={cn(
+              "px-6 md:px-8 py-3.5 rounded-2xl bg-surface-container-highest text-primary font-bold flex items-center justify-center gap-2.5 border border-outline-variant/10 hover:bg-surface-container-low transition-all shadow-sm cursor-pointer",
+              isImporting && "opacity-50 cursor-not-allowed pointer-events-none"
+            )}>
+              {isImporting ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+              <span className="text-sm md:text-base">{isImporting ? 'Processando...' : 'Importar'}</span>
+              <input 
+                type="file" 
+                className="hidden" 
+                accept="image/*,application/pdf"
+                onChange={handleImportFile}
+                disabled={isImporting}
+              />
+            </label>
+          </div>
+
+          {/* 3. Botões de filtro */}
+          <div className="flex flex-wrap items-center gap-4 mb-8">
+            <div className="flex items-center gap-3 px-5 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5">
+              <Calendar size={18} className="text-primary" />
+              <select 
+                value={selectedMonthYear}
+                onChange={(e) => setSelectedMonthYear(e.target.value)}
+                className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer outline-none"
               >
-                <Plus size={20} />
-                <span className="whitespace-nowrap text-sm md:text-base">Adicionar</span>
-              </button>
-              <div className="flex bg-surface-container-high p-1.5 rounded-2xl shadow-inner">
-                <button 
-                  onClick={() => setActiveTab('table')}
-                  className={cn(
-                    "px-4 md:px-6 py-2 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all",
-                    activeTab === 'table' 
-                      ? "bg-surface-container-lowest shadow-md text-primary" 
-                      : "text-on-surface-variant hover:text-on-surface"
-                  )}
-                >
-                  Tabela
-                </button>
-                <button 
-                  onClick={() => setActiveTab('insights')}
-                  className={cn(
-                    "px-4 md:px-6 py-2 md:py-2.5 rounded-xl text-xs md:text-sm font-bold transition-all",
-                    activeTab === 'insights' 
-                      ? "bg-surface-container-lowest shadow-md text-primary" 
-                      : "text-on-surface-variant hover:text-on-surface"
-                  )}
-                >
-                  Insights
-                </button>
-              </div>
-              <button className="px-6 md:px-8 py-3 md:py-3.5 rounded-2xl bg-surface-container-lowest text-on-surface font-bold flex items-center justify-center gap-2.5 border border-outline-variant/10 hover:bg-surface-container-low transition-all shadow-sm">
-                <Filter size={18} />
-                <span className="text-sm md:text-base">Filtros</span>
-              </button>
+                <option value="Todos">Todos os Meses</option>
+                {availableMonths.map(month => (
+                  <option key={month} value={month}>{month}</option>
+                ))}
+              </select>
+            </div>
+            
+            <div className="flex items-center gap-3 px-5 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5">
+              <Tag size={18} className="text-primary" />
+              <select 
+                value={selectedCategory}
+                onChange={(e) => setSelectedCategory(e.target.value)}
+                className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer outline-none"
+              >
+                <option value="Todas as Categorias">Todas as Categorias</option>
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
             </div>
           </div>
 
+          {/* 4. Cards com informações do mês e comparativos */}
           <Stats 
             total={totals.total} 
             currentMonthTotal={comparisonStats.current}
@@ -733,63 +776,6 @@ Responda de forma direta, profissional e empática, em português do Brasil. Use
 
           {activeTab === 'table' ? (
             <>
-              {/* Filters & Controls */}
-              <div className="flex flex-wrap items-center gap-4 md:gap-5 mb-8 px-2">
-                <div className="flex items-center gap-3 px-5 md:px-6 py-2.5 md:py-3 bg-surface-container-low rounded-full text-xs md:text-sm font-bold text-on-surface-variant border border-outline-variant/5">
-                  <Calendar size={18} className="text-primary" />
-                  <select 
-                    value={selectedMonthYear}
-                    onChange={(e) => setSelectedMonthYear(e.target.value)}
-                    className="bg-transparent border-none focus:ring-0 p-0 text-xs md:text-sm font-bold cursor-pointer"
-                  >
-                    <option value="Todos">Todos os Meses</option>
-                    {availableMonths.map(month => (
-                      <option key={month} value={month}>{month}</option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div className="flex items-center gap-3 px-5 md:px-6 py-2.5 md:py-3 bg-surface-container-low rounded-full text-xs md:text-sm font-bold text-on-surface-variant border border-outline-variant/5">
-                  <Tag size={18} className="text-primary" />
-                  <select 
-                    value={selectedCategory}
-                    onChange={(e) => setSelectedCategory(e.target.value)}
-                    className="bg-transparent border-none focus:ring-0 p-0 text-xs md:text-sm font-bold cursor-pointer"
-                  >
-                    <option value="Todas as Categorias">Todas as Categorias</option>
-                    {categories.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-                </div>
-                
-                <div className="w-full xl:w-auto xl:ml-auto flex items-center justify-between xl:justify-start gap-6">
-                  <label className={cn(
-                    "flex items-center gap-2.5 text-primary font-black text-xs md:text-sm hover:underline cursor-pointer transition-all group",
-                    isImporting && "opacity-50 cursor-not-allowed pointer-events-none"
-                  )}>
-                    {isImporting ? (
-                      <Loader2 size={18} className="animate-spin" />
-                    ) : (
-                      <Upload size={18} className="group-hover:-translate-y-0.5 transition-transform" />
-                    )}
-                    {isImporting ? 'Processando...' : 'Importar Despesas'}
-                    <input 
-                      type="file" 
-                      className="hidden" 
-                      accept="image/*,application/pdf"
-                      onChange={handleImportFile}
-                      disabled={isImporting}
-                    />
-                  </label>
-
-                  <button className="flex items-center gap-2.5 text-primary font-black text-sm hover:underline transition-all group">
-                    <Download size={18} className="group-hover:translate-y-0.5 transition-transform" />
-                    Exportar PDF
-                  </button>
-                </div>
-              </div>
-
               {loading ? (
                 <div className="flex flex-col items-center justify-center py-32 gap-4">
                   <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>

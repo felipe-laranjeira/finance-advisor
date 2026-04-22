@@ -258,54 +258,43 @@ export default function InvestmentsPage() {
         <TopBar />
         
         <div className="p-4 md:p-12 max-w-7xl mx-auto">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-12 md:mb-16">
-            <div>
-              <h2 className="text-3xl md:text-5xl font-black text-on-surface font-headline tracking-tight mb-3">Investimentos</h2>
-              <p className="text-on-surface-variant text-base md:text-lg font-medium">Gestão consolidada de ativos e evolução patrimonial.</p>
-            </div>
+          {/* 1. Titulo e Sub-Título */}
+          <div className="mb-8">
+            <h2 className="text-3xl md:text-5xl font-black text-on-surface font-headline tracking-tight mb-2">Investimentos</h2>
+            <p className="text-on-surface-variant text-base md:text-lg font-medium opacity-80">Gestão consolidada de ativos e evolução patrimonial.</p>
+          </div>
+          
+          {/* 2. Botão para adicionar e importar */}
+          <div className="flex flex-wrap items-center gap-4 mb-8">
+            <button 
+              onClick={() => {
+                setEditingInvestment(null);
+                setIsModalOpen(true);
+              }}
+              className="px-6 md:px-8 py-3.5 rounded-2xl bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold flex items-center justify-center gap-2.5 shadow-lg shadow-primary/20 hover:opacity-90 transition-all active:scale-95"
+            >
+              <TrendingUp size={20} />
+              <span className="text-sm md:text-base">Adicionar</span>
+            </button>
             
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-              <button 
-                onClick={() => {
-                  setEditingInvestment(null);
-                  setIsModalOpen(true);
-                }}
-                className="px-6 md:px-8 py-3 md:py-3.5 rounded-2xl bg-gradient-to-br from-primary to-primary-container text-on-primary font-bold flex items-center justify-center gap-2.5 shadow-lg shadow-primary/20 hover:opacity-90 transition-all active:scale-95"
-              >
-                <TrendingUp size={20} />
-                <span className="text-sm md:text-base">Novo Ativo</span>
-              </button>
-              
-              <label className={cn(
-                "px-6 md:px-8 py-3 md:py-3.5 rounded-2xl bg-surface-container-lowest text-primary font-bold flex items-center justify-center gap-2.5 border border-outline-variant/10 hover:bg-surface-container-low transition-all shadow-sm cursor-pointer",
-                isImporting && "opacity-50 cursor-not-allowed"
-              )}>
-                {isImporting ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
-                {isImporting ? 'Importando...' : 'Importar Extrato'}
-                <input type="file" className="hidden" onChange={handleImportFile} disabled={isImporting} accept="image/*,application/pdf" />
-              </label>
-            </div>
+            <label className={cn(
+              "px-6 md:px-8 py-3.5 rounded-2xl bg-surface-container-highest text-primary font-bold flex items-center justify-center gap-2.5 border border-outline-variant/10 hover:bg-surface-container-low transition-all shadow-sm cursor-pointer",
+              isImporting && "opacity-50 cursor-not-allowed"
+            )}>
+              {isImporting ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+              <span className="text-sm md:text-base">{isImporting ? 'Importando...' : 'Importar'}</span>
+              <input type="file" className="hidden" onChange={handleImportFile} disabled={isImporting} accept="image/*,application/pdf" />
+            </label>
           </div>
 
-          <InvestmentStats 
-            total={investments.reduce((acc, i) => acc + i.balance, 0)} 
-            categoryTotals={categoryTotals}
-          />
-
-          {user && (
-            <InvestmentAdvisor 
-              investments={investments} 
-              userId={user.id} 
-            />
-          )}
-
-          <div className="flex flex-wrap items-center gap-5 mb-8 px-2">
+          {/* 3. Botões de filtro */}
+          <div className="flex flex-wrap items-center gap-4 mb-8">
             <div className="flex items-center gap-3 px-6 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5">
               <Calendar size={18} className="text-primary" />
               <select 
                 value={selectedMonthYear}
                 onChange={(e) => setSelectedMonthYear(e.target.value)}
-                className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer"
+                className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer outline-none"
               >
                 <option value="Todos">Todos os Meses</option>
                 {availableMonths.map(month => (
@@ -314,6 +303,12 @@ export default function InvestmentsPage() {
               </select>
             </div>
           </div>
+
+          {/* 4. Cards com informações do mês e comparativos */}
+          <InvestmentStats 
+            total={investments.reduce((acc, i) => acc + i.balance, 0)} 
+            categoryTotals={categoryTotals}
+          />
 
           {loading ? (
             <div className="flex flex-col items-center justify-center py-32 gap-4">
@@ -339,7 +334,7 @@ export default function InvestmentsPage() {
                 }}
               />
 
-              <div className="mt-8 flex flex-col md:flex-row items-center justify-between gap-6 px-2">
+              <div className="mt-8 flex flex-col md:flex-row items-center justify-between gap-6 px-2 mb-12">
                 <div className="flex items-center gap-4">
                   <span className="text-sm font-bold text-on-surface-variant">Mostrar:</span>
                   <select 
@@ -377,6 +372,14 @@ export default function InvestmentsPage() {
                 </div>
               </div>
             </>
+          )}
+
+          {/* 4.1 Alpha Advisor após a tabela */}
+          {user && !loading && totalCount > 0 && (
+            <InvestmentAdvisor 
+              investments={investments} 
+              userId={user.id} 
+            />
           )}
         </div>
       </main>

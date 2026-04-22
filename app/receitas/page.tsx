@@ -469,45 +469,49 @@ export default function Page() {
         )}
 
         <div className="p-4 md:p-12 max-w-7xl mx-auto">
-          <div className="flex flex-col md:flex-row md:items-end justify-between gap-8 mb-12 md:mb-16">
-            <div>
-              <h2 className="text-3xl md:text-5xl font-black text-on-surface font-headline tracking-tight mb-3">Receitas</h2>
-              <p className="text-on-surface-variant text-base md:text-lg font-medium">Gestão de suas entradas financeiras e rendimentos.</p>
-            </div>
-            
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-              <button 
-                onClick={() => {
-                  setEditingTransaction(null);
-                  setIsModalOpen(true);
-                }}
-                className="px-6 md:px-8 py-3 md:py-3.5 rounded-2xl bg-primary text-on-primary font-bold flex items-center justify-center gap-2.5 shadow-lg shadow-primary/20 hover:opacity-90 transition-all"
-              >
-                <Plus size={20} />
-                <span className="text-sm md:text-base">Adicionar</span>
-              </button>
-              <button className="px-6 md:px-8 py-3 md:py-3.5 rounded-2xl bg-surface-container-lowest text-on-surface font-bold flex items-center justify-center gap-2.5 border border-outline-variant/10 hover:bg-surface-container-low transition-all shadow-sm">
-                <Filter size={18} />
-                <span className="text-sm md:text-base">Filtros</span>
-              </button>
-            </div>
+          {/* 1. Titulo e Sub-Título */}
+          <div className="mb-8">
+            <h2 className="text-3xl md:text-5xl font-black text-on-surface font-headline tracking-tight mb-2">Receitas</h2>
+            <p className="text-on-surface-variant text-base md:text-lg font-medium opacity-80">Gestão de suas entradas financeiras e rendimentos.</p>
           </div>
 
-          <Stats 
-            total={totals.total} 
-            currentMonthTotal={comparisonStats.current}
-            previousMonthTotal={comparisonStats.previous}
-            title="Receitas Totais"
-            type="income"
-          />
+          {/* 2. Botão para adicionar e importar */}
+          <div className="flex flex-wrap items-center gap-4 mb-8">
+            <button 
+              onClick={() => {
+                setEditingTransaction(null);
+                setIsModalOpen(true);
+              }}
+              className="px-6 md:px-8 py-3.5 rounded-2xl bg-primary text-on-primary font-bold flex items-center justify-center gap-2.5 shadow-lg shadow-primary/20 hover:opacity-90 transition-all active:scale-95"
+            >
+              <Plus size={20} />
+              <span className="text-sm md:text-base">Adicionar</span>
+            </button>
+            
+            <label className={cn(
+              "px-6 md:px-8 py-3.5 rounded-2xl bg-surface-container-highest text-primary font-bold flex items-center justify-center gap-2.5 border border-outline-variant/10 hover:bg-surface-container-low transition-all shadow-sm cursor-pointer",
+              isImporting && "opacity-50 cursor-not-allowed pointer-events-none"
+            )}>
+              {isImporting ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
+              <span className="text-sm md:text-base">{isImporting ? 'Processando...' : 'Importar'}</span>
+              <input 
+                type="file" 
+                className="hidden" 
+                accept="image/*,application/pdf"
+                onChange={handleImportFile}
+                disabled={isImporting}
+              />
+            </label>
+          </div>
 
-          <div className="flex flex-wrap items-center gap-5 mb-8 px-2">
-            <div className="flex items-center gap-3 px-6 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5">
+          {/* 3. Botões de filtro */}
+          <div className="flex flex-wrap items-center gap-4 mb-8">
+            <div className="flex items-center gap-3 px-5 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5">
               <Calendar size={18} className="text-primary" />
               <select 
                 value={selectedMonthYear}
                 onChange={(e) => setSelectedMonthYear(e.target.value)}
-                className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer"
+                className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer outline-none"
               >
                 <option value="Todos">Todos os Meses</option>
                 {availableMonths.map(month => (
@@ -516,12 +520,12 @@ export default function Page() {
               </select>
             </div>
             
-            <div className="flex items-center gap-3 px-6 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5">
+            <div className="flex items-center gap-3 px-5 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5">
               <Tag size={18} className="text-primary" />
               <select 
                 value={selectedCategory}
                 onChange={(e) => setSelectedCategory(e.target.value)}
-                className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer"
+                className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer outline-none"
               >
                 <option value="Todas as Categorias">Todas as Categorias</option>
                 {categories.map(cat => (
@@ -529,33 +533,16 @@ export default function Page() {
                 ))}
               </select>
             </div>
-            
-            <div className="ml-auto flex items-center gap-4">
-              <label className={cn(
-                "flex items-center gap-2.5 text-primary font-black text-sm hover:underline cursor-pointer transition-all group",
-                isImporting && "opacity-50 cursor-not-allowed pointer-events-none"
-              )}>
-                {isImporting ? (
-                  <Loader2 size={18} className="animate-spin" />
-                ) : (
-                  <Upload size={18} className="group-hover:-translate-y-0.5 transition-transform" />
-                )}
-                {isImporting ? 'Processando...' : 'Importar Receitas'}
-                <input 
-                  type="file" 
-                  className="hidden" 
-                  accept="image/*,application/pdf"
-                  onChange={handleImportFile}
-                  disabled={isImporting}
-                />
-              </label>
-
-              <button className="flex items-center gap-2.5 text-primary font-black text-sm hover:underline transition-all group">
-                <Download size={18} className="group-hover:translate-y-0.5 transition-transform" />
-                Exportar PDF
-              </button>
-            </div>
           </div>
+
+          {/* 4. Cards com informações do mês e comparativos */}
+          <Stats 
+            total={totals.total} 
+            currentMonthTotal={comparisonStats.current}
+            previousMonthTotal={comparisonStats.previous}
+            title="Receitas Totais"
+            type="income"
+          />
 
           {loading ? (
             <div className="flex flex-col items-center justify-center py-32 gap-4">
