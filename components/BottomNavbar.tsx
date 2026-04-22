@@ -17,7 +17,7 @@ const navItems = [
   { icon: ArrowDownCircle, label: 'Receitas', href: '/receitas' },
   { icon: Receipt, label: 'Despesas', href: '/despesas' },
   { icon: TrendingUp, label: 'Investimentos', href: '/investimentos' },
-  { icon: Target, label: 'Metas', href: '/orcamento' },
+  { icon: Target, label: 'Orçamento', href: '/orcamento' },
 ];
 
 export function BottomNavbar() {
