@@ -17,6 +17,7 @@ interface AuthContextType {
   loading: boolean;
   login: (userData: AppUser) => void;
   signOut: () => Promise<void>;
+  updateUser: (userData: Partial<AppUser>) => void;
 }
 
 const AuthContext = createContext<AuthContextType>({
@@ -24,6 +25,7 @@ const AuthContext = createContext<AuthContextType>({
   loading: true,
   login: () => {},
   signOut: async () => {},
+  updateUser: () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
@@ -88,8 +90,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     router.push('/');
   };
 
+  const updateUser = (userData: Partial<AppUser>) => {
+    if (user) {
+      const updatedUser = { ...user, ...userData };
+      localStorage.setItem('app_user', JSON.stringify(updatedUser));
+      setUser(updatedUser);
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, signOut }}>
+    <AuthContext.Provider value={{ user, loading, login, signOut, updateUser }}>
       {children}
     </AuthContext.Provider>
   );
