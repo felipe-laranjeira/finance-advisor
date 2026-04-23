@@ -41,6 +41,7 @@ const months = [
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const [isMobile, setIsMobile] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [incomeData, setIncomeData] = useState<any[]>([]);
@@ -51,6 +52,15 @@ export default function DashboardPage() {
   const [budgets, setBudgets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [hasData, setHasData] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    const checkIsMobile = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    checkIsMobile();
+    window.addEventListener('resize', checkIsMobile);
+    return () => window.removeEventListener('resize', checkIsMobile);
+  }, []);
 
   const years = useMemo(() => {
     const currentYear = new Date().getFullYear();
@@ -528,20 +538,20 @@ export default function DashboardPage() {
 
             {/* Category Split Donut Chart */}
             <div className="bg-surface-container-low p-8 rounded-[2.5rem] border border-outline-variant/10">
-              <div className="mb-8">
+              <div className="mb-8 text-center md:text-left">
                 <h3 className="text-xl font-black font-headline text-on-surface tracking-tight">Despesas por Categoria</h3>
                 <p className="text-sm text-on-surface-variant font-medium">Distribuição dos gastos no mês selecionado</p>
               </div>
-              <div className="h-80 w-full flex flex-col md:flex-row items-center justify-center gap-8">
-                <div className="h-full w-full md:w-1/2">
+              <div className="h-auto min-h-[500px] md:h-96 w-full flex flex-col md:flex-row items-center justify-center gap-8">
+                <div className="h-64 md:h-full w-full md:w-1/2">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={stats.pieData}
                         cx="50%"
                         cy="50%"
-                        innerRadius={60}
-                        outerRadius={100}
+                        innerRadius={isMobile ? 45 : 55}
+                        outerRadius={isMobile ? 75 : 90}
                         paddingAngle={5}
                         dataKey="value"
                       >
@@ -556,14 +566,19 @@ export default function DashboardPage() {
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="w-full md:w-1/2 space-y-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                <div className="w-full md:w-1/2 space-y-3 max-h-[350px] md:max-h-80 overflow-y-auto pr-2 custom-scrollbar">
                   {stats.pieData.map((entry, index) => (
-                    <div key={entry.name} className="flex items-center justify-between p-3 bg-surface-container-lowest rounded-xl border border-outline-variant/5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
-                        <span className="text-sm font-bold text-on-surface">{entry.name}</span>
+                    <div key={entry.name} className="flex flex-col gap-1.5 p-3 bg-surface-container-lowest rounded-xl border border-outline-variant/5">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: COLORS[index % COLORS.length] }} />
+                        <span className="text-sm font-bold text-on-surface truncate">{entry.name}</span>
                       </div>
-                      <span className="text-sm font-black text-on-surface-variant">{formatCurrency(entry.value)}</span>
+                      <div className="flex items-center justify-between ml-6">
+                        <span className="text-xs font-black text-primary font-headline">{formatCurrency(entry.value)}</span>
+                        <span className="text-[10px] font-black text-on-surface-variant/40 bg-surface-container-high px-2 py-0.5 rounded-full">
+                          {stats.totalExpense > 0 ? ((entry.value / stats.totalExpense) * 100).toFixed(0) : 0}%
+                        </span>
+                      </div>
                     </div>
                   ))}
                   {stats.pieData.length === 0 && (
@@ -577,20 +592,20 @@ export default function DashboardPage() {
 
             {/* Assets Split Donut Chart */}
             <div className="bg-surface-container-low p-8 rounded-[2.5rem] border border-outline-variant/10">
-              <div className="mb-8">
+              <div className="mb-8 text-center md:text-left">
                 <h3 className="text-xl font-black font-headline text-on-surface tracking-tight">Patrimônio por Ativo</h3>
                 <p className="text-sm text-on-surface-variant font-medium">Distribuição dos investimentos no mês selecionado</p>
               </div>
-              <div className="h-80 w-full flex flex-col md:flex-row items-center justify-center gap-8">
-                <div className="h-full w-full md:w-1/2">
+              <div className="h-auto min-h-[500px] md:h-96 w-full flex flex-col md:flex-row items-center justify-center gap-8">
+                <div className="h-64 md:h-full w-full md:w-1/2">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
                       <Pie
                         data={stats.investmentPieData}
                         cx="50%"
                         cy="50%"
-                        innerRadius={60}
-                        outerRadius={100}
+                        innerRadius={isMobile ? 45 : 55}
+                        outerRadius={isMobile ? 75 : 90}
                         paddingAngle={5}
                         dataKey="value"
                       >
@@ -605,18 +620,18 @@ export default function DashboardPage() {
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-                <div className="w-full md:w-1/2 space-y-3 max-h-64 overflow-y-auto pr-2 custom-scrollbar">
+                <div className="w-full md:w-1/2 space-y-3 max-h-[350px] md:max-h-80 overflow-y-auto pr-2 custom-scrollbar">
                   {stats.investmentPieData.map((entry, index) => (
-                    <div key={entry.name} className="flex items-center justify-between p-3 bg-surface-container-lowest rounded-xl border border-outline-variant/5">
-                      <div className="flex items-center gap-3">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: COLORS[(index + 2) % COLORS.length] }} />
-                        <span className="text-sm font-bold text-on-surface">{entry.name}</span>
+                    <div key={entry.name} className="flex flex-col gap-1.5 p-3 bg-surface-container-lowest rounded-xl border border-outline-variant/5">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: COLORS[(index + 2) % COLORS.length] }} />
+                        <span className="text-sm font-bold text-on-surface truncate">{entry.name}</span>
                       </div>
-                      <div className="text-right">
-                        <div className="text-sm font-black text-on-surface">{formatCurrency(entry.value)}</div>
-                        <div className="text-[10px] font-bold text-on-surface-variant opacity-60">
-                          {((entry.value / stats.totalEquity) * 100).toFixed(1)}%
-                        </div>
+                      <div className="flex items-center justify-between ml-6">
+                        <span className="text-xs font-black text-secondary font-headline">{formatCurrency(entry.value)}</span>
+                        <span className="text-[10px] font-black text-on-surface-variant/40 bg-surface-container-high px-2 py-0.5 rounded-full">
+                          {stats.totalEquity > 0 ? ((entry.value / stats.totalEquity) * 100).toFixed(0) : 0}%
+                        </span>
                       </div>
                     </div>
                   ))}
@@ -638,9 +653,12 @@ export default function DashboardPage() {
                 <p className="text-sm text-on-surface-variant font-medium">Acompanhamento do limite de gastos por categoria no mês de {months[selectedMonth]}</p>
               </div>
               
-              <div className="h-80 w-full mb-8">
+              <div className={cn(
+                "w-full mb-8",
+                isMobile ? "h-[500px]" : "h-80"
+              )}>
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={stats.budgetAnalysis} layout="vertical">
+                  <BarChart data={stats.budgetAnalysis} layout="vertical" margin={{ left: isMobile ? 0 : 20 }}>
                     <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e0e3e6" />
                     <XAxis type="number" hide />
                     <YAxis 

@@ -144,6 +144,7 @@ export function InvestmentModal({ isOpen, onClose, onSave, editingInvestment }: 
                       <input
                         required
                         type="text"
+                        inputMode="decimal"
                         value={formData.balance}
                         onChange={(e) => setFormData({ ...formData, balance: maskCurrency(e.target.value) })}
                         className="w-full pl-12 pr-6 py-4 bg-surface-container-high border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-bold text-lg"

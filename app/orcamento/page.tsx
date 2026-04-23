@@ -36,6 +36,22 @@ export default function BudgetPage() {
   const [saving, setSaving] = useState<string | null>(null);
   const [editingLimit, setEditingLimit] = useState<{ id: string, value: string } | null>(null);
 
+  const maskCurrency = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    if (!digits) return '';
+    const amount = parseInt(digits, 10) / 100;
+    return new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL',
+    }).format(amount);
+  };
+
+  const parseCurrency = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    if (!digits) return 0;
+    return parseInt(digits, 10) / 100;
+  };
+
   const fetchData = useCallback(async () => {
     if (!user) return;
     setLoading(true);
@@ -130,12 +146,12 @@ export default function BudgetPage() {
   };
 
   const handleInputChange = (categoryId: string, value: string) => {
-    setEditingLimit({ id: categoryId, value });
+    setEditingLimit({ id: categoryId, value: maskCurrency(value) });
   };
 
   const handleBlur = (categoryId: string) => {
     if (editingLimit && editingLimit.id === categoryId) {
-      const numericValue = parseFloat(editingLimit.value.replace(',', '.')) || 0;
+      const numericValue = parseCurrency(editingLimit.value);
       handleUpdateLimit(categoryId, numericValue);
     } else {
       setEditingLimit(null);
@@ -239,24 +255,25 @@ export default function BudgetPage() {
                             <div className="flex flex-col items-end">
                               {editingLimit?.id === item.id ? (
                                 <div className="flex items-center gap-2">
-                                  <span className="text-primary font-bold text-xs">R$</span>
                                   <input
                                     autoFocus
                                     type="text"
+                                    inputMode="decimal"
                                     value={editingLimit.value}
+                                    placeholder="R$ 0,00"
                                     onChange={(e) => handleInputChange(item.id, e.target.value)}
                                     onBlur={() => handleBlur(item.id)}
                                     onKeyDown={(e) => {
                                       if (e.key === 'Enter') handleBlur(item.id);
                                       if (e.key === 'Escape') setEditingLimit(null);
                                     }}
-                                    className="bg-surface-container-highest border-2 border-primary rounded-xl px-2 py-1.5 w-24 outline-none font-black text-xs text-on-surface shadow-md"
+                                    className="bg-surface-container-highest border-2 border-primary rounded-xl px-2 py-1.5 w-32 outline-none font-black text-xs text-on-surface shadow-md text-right"
                                   />
                                 </div>
                               ) : (
                                 <button 
                                   onClick={() => {
-                                    const val = item.limit === 0 ? '' : item.limit.toString();
+                                    const val = item.limit === 0 ? '' : maskCurrency((item.limit * 100).toFixed(0));
                                     setEditingLimit({ id: item.id, value: val });
                                   }}
                                   className="text-lg font-black text-primary flex items-center gap-1 active:scale-95 transition-transform"
@@ -305,25 +322,26 @@ export default function BudgetPage() {
                               <td className="px-6 md:px-8 py-4 md:py-6 relative">
                                 {editingLimit?.id === item.id ? (
                                   <div className="flex items-center gap-2">
-                                    <span className="text-primary font-bold text-xs md:text-sm">R$</span>
                                     <input
                                       autoFocus
                                       type="text"
+                                      inputMode="decimal"
                                       value={editingLimit.value}
+                                      placeholder="R$ 0,00"
                                       onChange={(e) => handleInputChange(item.id, e.target.value)}
                                       onBlur={() => handleBlur(item.id)}
                                       onKeyDown={(e) => {
                                         if (e.key === 'Enter') handleBlur(item.id);
                                         if (e.key === 'Escape') setEditingLimit(null);
                                       }}
-                                      className="bg-surface-container-highest border-2 border-primary rounded-xl px-2 md:px-3 py-1 md:py-1.5 w-24 md:w-32 outline-none font-black text-xs md:text-sm text-on-surface shadow-lg"
+                                      className="bg-surface-container-highest border-2 border-primary rounded-xl px-2 md:px-3 py-1 md:py-1.5 w-32 md:w-40 outline-none font-black text-xs md:text-sm text-on-surface shadow-lg text-right"
                                     />
                                   </div>
                                 ) : (
                                   <button 
                                     onClick={() => {
                                       // Clear field if 0, otherwise show current value
-                                      const val = item.limit === 0 ? '' : item.limit.toString();
+                                      const val = item.limit === 0 ? '' : maskCurrency((item.limit * 100).toFixed(0));
                                       setEditingLimit({ id: item.id, value: val });
                                     }}
                                     className="text-sm md:text-base font-black text-on-surface hover:text-primary transition-colors flex items-center gap-2 group/btn"

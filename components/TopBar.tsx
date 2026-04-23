@@ -126,7 +126,14 @@ export function TopBar() {
   return (
     <>
       <header className="w-full h-20 flex items-center justify-between px-4 md:px-10 sticky top-0 z-40 glass border-b border-outline-variant/5">
-        <div className="flex items-center gap-4 md:gap-6">
+        <div className="flex items-center gap-4 md:gap-6 min-w-0">
+          {/* User Name for Mobile/Tablet (Left side) */}
+          <div className="lg:hidden flex items-center min-w-0">
+            <p className="text-sm font-black text-on-surface tracking-tight leading-tight truncate max-w-[180px]">
+              {user?.name && user.name.trim() !== "" ? user.name : 'Bem-vindo'}
+            </p>
+          </div>
+
           <div className="relative group hidden sm:block">
             <span className="absolute inset-y-0 left-4 flex items-center text-on-surface-variant">
               <Search size={18} />

@@ -145,6 +145,7 @@ export function TransactionModal({ isOpen, onClose, onSave, editingTransaction, 
                     <input
                       required
                       type="text"
+                      inputMode="decimal"
                       value={formData.amount}
                       onChange={(e) => setFormData({ ...formData, amount: maskCurrency(e.target.value) })}
                       className="w-full px-6 py-4 bg-surface-container-high border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-bold text-lg"
