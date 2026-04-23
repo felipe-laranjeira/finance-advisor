@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { SessionManager } from './SessionManager';
 
 interface AppUser {
   id: string;
@@ -100,6 +101,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <AuthContext.Provider value={{ user, loading, login, signOut, updateUser }}>
+      <SessionManager />
       {children}
     </AuthContext.Provider>
   );
