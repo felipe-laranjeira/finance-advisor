@@ -148,7 +148,7 @@ export default function DashboardPage() {
         // Fetch Expenses for selected month
         const { data: expenses, error: expensesErr } = await supabase
           .from('transactions')
-          .select('*, categories(name)')
+          .select('*, categories(name, is_investment)')
           .eq('user_id', user.id)
           .gte('date', startDate)
           .lte('date', endDate);
@@ -184,12 +184,21 @@ export default function DashboardPage() {
           evolutionPromises.push(
             Promise.all([
               supabase.from('incoming').select('amount').eq('user_id', user.id).gte('date', start).lte('date', end),
-              supabase.from('transactions').select('amount').eq('user_id', user.id).gte('date', start).lte('date', end)
-            ]).then(([inc, exp]) => ({
-              month: months[d.getMonth()],
-              income: inc.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0,
-              expense: Math.abs(exp.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0)
-            }))
+              supabase.from('transactions').select('amount, categories(is_investment)').eq('user_id', user.id).gte('date', start).lte('date', end)
+            ]).then(([inc, exp]) => {
+              const incomeSum = inc.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0;
+              const totalExpSum = Math.abs(exp.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0);
+              const invExpSum = Math.abs(exp.data?.filter(e => e.categories?.is_investment === true).reduce((acc, curr) => acc + Number(curr.amount), 0) || 0);
+              const consumptionExpSum = totalExpSum - invExpSum;
+
+              return {
+                month: months[d.getMonth()],
+                income: incomeSum,
+                expense: consumptionExpSum,
+                balance: incomeSum - totalExpSum,
+                investmentRate: incomeSum > 0 ? (invExpSum / incomeSum) * 100 : 0
+              };
+            })
           );
 
           equityEvolutionPromises.push(
@@ -227,10 +236,19 @@ export default function DashboardPage() {
 
   const stats = useMemo(() => {
     const totalIncome = incomeData.reduce((acc, curr) => acc + Number(curr.amount), 0);
-    const totalExpense = Math.abs(expenseData.reduce((acc, curr) => acc + Number(curr.amount), 0));
-    const balance = totalIncome - totalExpense;
+    
+    // Separate Investment contributions from Consumption expenses
+    const investmentTransactions = expenseData.filter(curr => curr.categories?.is_investment === true);
+    const consumptionTransactions = expenseData.filter(curr => curr.categories?.is_investment !== true);
 
-    const expenseByCategory = expenseData.reduce((acc: any, curr) => {
+    const totalInvestmentFlow = Math.abs(investmentTransactions.reduce((acc, curr) => acc + Number(curr.amount), 0));
+    const totalConsumptionExpense = Math.abs(consumptionTransactions.reduce((acc, curr) => acc + Number(curr.amount), 0));
+    const totalExpense = totalInvestmentFlow + totalConsumptionExpense;
+    
+    const balance = totalIncome - totalExpense;
+    const investmentRate = totalIncome > 0 ? (totalInvestmentFlow / totalIncome) * 100 : 0;
+
+    const expenseByCategory = consumptionTransactions.reduce((acc: any, curr) => {
       const catName = curr.categories?.name || 'Outros';
       acc[catName] = (acc[catName] || 0) + Math.abs(Number(curr.amount));
       return acc;
@@ -273,6 +291,9 @@ export default function DashboardPage() {
     return {
       totalIncome,
       totalExpense,
+      totalInvestmentFlow,
+      totalConsumptionExpense,
+      investmentRate,
       balance,
       pieData,
       investmentPieData,
@@ -379,32 +400,36 @@ export default function DashboardPage() {
           )}
 
           {/* Summary Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Income Card */}
-            <div className="bg-surface-container-lowest p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-outline-variant/10 shadow-sm relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
-                <TrendingUp size={80} className="text-secondary" />
+            <div className="bg-surface-container-lowest p-6 rounded-[2rem] border border-outline-variant/10 shadow-sm relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                <TrendingUp size={60} className="text-secondary" />
               </div>
-              <div className="relative z-10">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 rounded-xl bg-secondary/10 text-secondary">
-                    <ArrowUpRight size={20} />
+              <div className="relative z-10 flex justify-between items-end">
+                <div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-1.5 rounded-lg bg-secondary/10 text-secondary">
+                      <ArrowUpRight size={16} />
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Receitas</span>
                   </div>
-                  <span className="text-xs font-black uppercase tracking-widest text-on-surface-variant">Total de Receitas</span>
+                  <h2 className="text-2xl font-black font-headline text-on-surface">
+                    {formatCurrency(stats.totalIncome)}
+                  </h2>
                 </div>
-                <h2 className="text-4xl font-black font-headline text-on-surface mb-4">
-                  {formatCurrency(stats.totalIncome)}
-                </h2>
-                <div className="h-16 w-full">
+                <div className="h-16 w-32 mb-1">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={evolutionData}>
-                      <defs>
-                        <linearGradient id="colorIncome" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#006b5f" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#006b5f" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <Area type="monotone" dataKey="income" stroke="#006b5f" fillOpacity={1} fill="url(#colorIncome)" strokeWidth={3} />
+                      <Area 
+                        type="monotone" 
+                        dataKey="income" 
+                        stroke="#006b5f" 
+                        fill="#006b5f" 
+                        fillOpacity={0.1} 
+                        strokeWidth={2}
+                        dot={false}
+                      />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -412,30 +437,34 @@ export default function DashboardPage() {
             </div>
 
             {/* Expense Card */}
-            <div className="bg-surface-container-lowest p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] border border-outline-variant/10 shadow-sm relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-6 opacity-5 group-hover:opacity-10 transition-opacity">
-                <TrendingDown size={80} className="text-tertiary" />
+            <div className="bg-surface-container-lowest p-6 rounded-[2rem] border border-outline-variant/10 shadow-sm relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+                <TrendingDown size={60} className="text-tertiary" />
               </div>
-              <div className="relative z-10">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 rounded-xl bg-tertiary/10 text-tertiary">
-                    <ArrowDownRight size={20} />
+              <div className="relative z-10 flex justify-between items-end">
+                <div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-1.5 rounded-lg bg-tertiary/10 text-tertiary">
+                      <ArrowDownRight size={16} />
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Consumo</span>
                   </div>
-                  <span className="text-xs font-black uppercase tracking-widest text-on-surface-variant">Total de Despesas</span>
+                  <h2 className="text-2xl font-black font-headline text-on-surface">
+                    {formatCurrency(stats.totalConsumptionExpense)}
+                  </h2>
                 </div>
-                <h2 className="text-4xl font-black font-headline text-on-surface mb-4">
-                  {formatCurrency(stats.totalExpense)}
-                </h2>
-                <div className="h-16 w-full">
+                <div className="h-16 w-32 mb-1">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={evolutionData}>
-                      <defs>
-                        <linearGradient id="colorExpense" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#68151b" stopOpacity={0.3}/>
-                          <stop offset="95%" stopColor="#68151b" stopOpacity={0}/>
-                        </linearGradient>
-                      </defs>
-                      <Area type="monotone" dataKey="expense" stroke="#68151b" fillOpacity={1} fill="url(#colorExpense)" strokeWidth={3} />
+                      <Area 
+                        type="monotone" 
+                        dataKey="expense" 
+                        stroke="#68151b" 
+                        fill="#68151b" 
+                        fillOpacity={0.1} 
+                        strokeWidth={2}
+                        dot={false}
+                      />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -443,23 +472,78 @@ export default function DashboardPage() {
             </div>
 
             {/* Balance Card */}
-            <div className="bg-primary p-6 md:p-8 rounded-[2rem] md:rounded-[2.5rem] shadow-xl shadow-primary/20 relative overflow-hidden group">
-              <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-20 transition-opacity">
-                <DollarSign size={80} className="text-white" />
+            <div className={cn(
+              "p-6 rounded-[2rem] shadow-xl relative overflow-hidden group",
+              stats.balance >= 0 ? "bg-primary shadow-primary/20" : "bg-error shadow-error/20"
+            )}>
+              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <DollarSign size={60} className="text-white" />
               </div>
-              <div className="relative z-10">
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 rounded-xl bg-white/10 text-white">
-                    <TrendingUp size={20} />
+              <div className="relative z-10 text-white flex justify-between items-end">
+                <div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-1.5 rounded-lg bg-white/10 text-white">
+                      <TrendingUp size={16} />
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Saldo Livre</span>
                   </div>
-                  <span className="text-xs font-black uppercase tracking-widest text-primary-fixed/60">Saldo do Mês</span>
+                  <h2 className="text-2xl font-black font-headline">
+                    {formatCurrency(stats.balance)}
+                  </h2>
                 </div>
-                <h2 className="text-4xl font-black font-headline text-white mb-2">
-                  {formatCurrency(stats.balance)}
-                </h2>
-                <p className="text-primary-fixed/80 text-sm font-medium">
-                  {stats.balance >= 0 ? 'Você está no azul!' : 'Atenção ao orçamento.'}
-                </p>
+                <div className="h-16 w-32 mb-1">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={evolutionData}>
+                      <Area 
+                        type="monotone" 
+                        dataKey="balance" 
+                        stroke="#ffffff" 
+                        fill="#ffffff" 
+                        fillOpacity={0.2} 
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+
+            {/* Investment Rate Card */}
+            <div className="bg-secondary p-6 rounded-[2rem] shadow-xl shadow-secondary/20 relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:opacity-20 transition-opacity">
+                <TrendingUp size={60} className="text-white" />
+              </div>
+              <div className="relative z-10 text-on-secondary flex justify-between items-end">
+                <div>
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="p-1.5 rounded-lg bg-white/10 text-white">
+                      <ArrowUpRight size={16} />
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Taxa de Aporte</span>
+                  </div>
+                  <h2 className="text-2xl font-black font-headline mb-1">
+                    {stats.investmentRate.toFixed(1)}%
+                  </h2>
+                  <p className="text-[10px] font-medium opacity-90 truncate">
+                    Investiu {formatCurrency(stats.totalInvestmentFlow)}
+                  </p>
+                </div>
+                <div className="h-16 w-32 mb-1">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={evolutionData}>
+                      <Area 
+                        type="monotone" 
+                        dataKey="investmentRate" 
+                        stroke="#ffffff" 
+                        fill="#ffffff" 
+                        fillOpacity={0.2} 
+                        strokeWidth={2}
+                        dot={false}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
           </div>
@@ -474,7 +558,7 @@ export default function DashboardPage() {
               </div>
               <div className="h-80 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={evolutionData}>
+                  <BarChart data={evolutionData} margin={{ left: 10, right: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e0e3e6" />
                     <XAxis 
                       dataKey="month" 
@@ -484,6 +568,7 @@ export default function DashboardPage() {
                       dy={10}
                     />
                     <YAxis 
+                      width={80}
                       axisLine={false} 
                       tickLine={false} 
                       tick={{ fill: '#434652', fontSize: 10, fontWeight: 700 }}
@@ -510,7 +595,7 @@ export default function DashboardPage() {
               </div>
               <div className="h-80 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={equityEvolutionData}>
+                  <BarChart data={equityEvolutionData} margin={{ left: 10, right: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e0e3e6" />
                     <XAxis 
                       dataKey="month" 
@@ -520,6 +605,7 @@ export default function DashboardPage() {
                       dy={10}
                     />
                     <YAxis 
+                      width={80}
                       axisLine={false} 
                       tickLine={false} 
                       tick={{ fill: '#434652', fontSize: 10, fontWeight: 700 }}

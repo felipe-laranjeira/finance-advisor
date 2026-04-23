@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
@@ -26,7 +26,7 @@ interface TransactionModalProps {
 }
 
 export function TransactionModal({ isOpen, onClose, onSave, editingTransaction, type = 'expense' }: TransactionModalProps) {
-  const [categories, setCategories] = useState<string[]>([]);
+  const [categories, setCategories] = useState<{ name: string, is_investment: boolean }[]>([]);
   const { user } = useAuth();
 
   const maskCurrency = (value: string) => {
@@ -56,34 +56,55 @@ export function TransactionModal({ isOpen, onClose, onSave, editingTransaction, 
     let mounted = true;
     const fetchCategories = async () => {
       const categoryTable = type === 'income' ? 'incoming_categories' : 'categories';
-      const { data, error } = await supabase
+      
+      let query = supabase
         .from(categoryTable)
-        .select('name')
+        .select(categoryTable === 'categories' ? 'name, is_investment' : 'name')
         .order('name');
+      
+      const { data, error } = await query;
       
       if (error) {
         console.error(`Error fetching ${categoryTable}:`, error);
         if (mounted) {
           const fallbacks = type === 'income' 
-            ? ['Salário', 'Freelance', 'Dividendos', 'Aluguel', 'Investimentos', 'Outros']
-            : ['Alimentação', 'Transporte', 'Saúde', 'Educação', 'Lazer', 'Moradia', 'Outros'];
+            ? ['Salário', 'Freelance', 'Dividendos', 'Aluguel', 'Investimentos', 'Outros'].map(n => ({ name: n, is_investment: false }))
+            : ['Alimentação', 'Transporte', 'Saúde', 'Educação', 'Lazer', 'Moradia', 'Outros'].map(n => ({ name: n, is_investment: false }));
           setCategories(fallbacks);
         }
         return;
       }
 
       if (data && mounted) {
-        setCategories(data.map((c: any) => c.name));
+        setCategories(data.map((c: any) => ({
+          name: c.name,
+          is_investment: c.is_investment || false
+        })));
       }
     };
     fetchCategories();
     return () => { mounted = false; };
   }, [type]);
 
+  const filteredCategories = useMemo(() => {
+    if (type === 'income') return categories;
+    if (type === 'investment') return categories.filter(c => c.is_investment);
+    // If type is expense, we only show non-investment categories
+    return categories.filter(c => !c.is_investment);
+  }, [categories, type]);
+
+  // Set default category if current one is not in filtered list
+  useEffect(() => {
+    if (filteredCategories.length > 0 && !filteredCategories.find(c => c.name === formData.category)) {
+      setFormData(prev => ({ ...prev, category: filteredCategories[0].name }));
+    }
+  }, [filteredCategories]);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseCurrency(formData.amount);
-    const finalAmount = type === 'expense' ? -Math.abs(amount) : Math.abs(amount);
+    // Investments and Expenses are both deductions from cash balance (negative in transactions table)
+    const finalAmount = (type === 'expense' || type === 'investment') ? -Math.abs(amount) : Math.abs(amount);
 
     onSave({
       id: editingTransaction?.id,
@@ -172,8 +193,8 @@ export function TransactionModal({ isOpen, onClose, onSave, editingTransaction, 
                       onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                       className="w-full px-6 py-4 bg-surface-container-high border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-bold"
                     >
-                      {categories.map((c) => (
-                        <option key={c} value={c}>{c}</option>
+                      {filteredCategories.map((c) => (
+                        <option key={c.name} value={c.name}>{c.name}</option>
                       ))}
                     </select>
                   </div>
