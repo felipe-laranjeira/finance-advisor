@@ -208,7 +208,9 @@ export default function DashboardPage() {
               exp.data?.forEach(item => {
                 const amt = Math.abs(Number(item.amount));
                 totalExpTableFlow += amt;
-                if (item.transactions_categories?.name === 'Investimentos') {
+                const cat = item.transactions_categories;
+                const catName = Array.isArray(cat) ? cat[0]?.name : (cat as any)?.name;
+                if (catName === 'Investimentos') {
                   expInvSum += amt;
                 }
               });
@@ -267,7 +269,11 @@ export default function DashboardPage() {
     // Regra 2 & 4: Segregar despesas de investimento
     const totalExpFromTable = expenseData.reduce((acc, curr) => acc + Math.abs(Number(curr.amount)), 0);
     const expenseInvestments = expenseData
-      .filter(curr => curr.transactions_categories?.name === 'Investimentos')
+      .filter(curr => {
+        const cat = curr.transactions_categories;
+        const catName = Array.isArray(cat) ? cat[0]?.name : (cat as any)?.name;
+        return catName === 'Investimentos';
+      })
       .reduce((acc, curr) => acc + Math.abs(Number(curr.amount)), 0);
     
     const investmentFlowFromTable = Math.abs(investmentFlows.reduce((acc, curr) => acc + Number(curr.amount), 0));
@@ -283,7 +289,8 @@ export default function DashboardPage() {
     const investmentRate = totalIncome > 0 ? (totalInvested / totalIncome) * 100 : 0;
 
     const expenseByCategory = expenseData.reduce((acc: any, curr) => {
-      const catName = curr.transactions_categories?.name || 'Outros';
+      const cat = curr.transactions_categories;
+      const catName = (Array.isArray(cat) ? cat[0]?.name : (cat as any)?.name) || 'Outros';
       acc[catName] = (acc[catName] || 0) + Math.abs(Number(curr.amount));
       return acc;
     }, {});
