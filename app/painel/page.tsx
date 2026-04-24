@@ -46,7 +46,8 @@ export default function DashboardPage() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [incomeData, setIncomeData] = useState<any[]>([]);
   const [expenseData, setExpenseData] = useState<any[]>([]);
-  const [investmentData, setInvestmentData] = useState<any[]>([]);
+  const [investmentFlows, setInvestmentFlows] = useState<any[]>([]);
+  const [investmentAssets, setInvestmentAssets] = useState<any[]>([]);
   const [evolutionData, setEvolutionData] = useState<any[]>([]);
   const [equityEvolutionData, setEquityEvolutionData] = useState<any[]>([]);
   const [budgets, setBudgets] = useState<any[]>([]);
@@ -72,22 +73,24 @@ export default function DashboardPage() {
     const setInitialMonth = async () => {
       if (!user) return;
       
-      const [latestInc, latestExp] = await Promise.all([
+      const [latestInc, latestExp, latestInv] = await Promise.all([
         supabase.from('incoming').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(1),
-        supabase.from('transactions').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(1)
+        supabase.from('expense_transactions').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(1),
+        supabase.from('investment_transactions').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(1)
       ]);
 
-      const hasAnyData = (latestInc.data && latestInc.data.length > 0) || (latestExp.data && latestExp.data.length > 0);
+      const hasAnyData = (latestInc.data && latestInc.data.length > 0) || 
+                        (latestExp.data && latestExp.data.length > 0) ||
+                        (latestInv.data && latestInv.data.length > 0);
       setHasData(hasAnyData);
 
       if (hasAnyData) {
-        let latestDate: Date | null = null;
-        if (latestInc.data?.[0]?.date) latestDate = new Date(latestInc.data[0].date);
-        if (latestExp.data?.[0]?.date) {
-          const expDate = new Date(latestExp.data[0].date);
-          // Use UTC to avoid timezone shifts
-          if (!latestDate || expDate > latestDate) latestDate = expDate;
-        }
+        let dates: Date[] = [];
+        if (latestInc.data?.[0]?.date) dates.push(new Date(latestInc.data[0].date));
+        if (latestExp.data?.[0]?.date) dates.push(new Date(latestExp.data[0].date));
+        if (latestInv.data?.[0]?.date) dates.push(new Date(latestInv.data[0].date));
+
+        let latestDate = dates.length > 0 ? new Date(Math.max(...dates.map(d => d.getTime()))) : null;
 
         if (latestDate) {
           const now = new Date();
@@ -147,27 +150,38 @@ export default function DashboardPage() {
 
         // Fetch Expenses for selected month
         const { data: expenses, error: expensesErr } = await supabase
-          .from('transactions')
-          .select('*, categories(name, is_investment)')
+          .from('expense_transactions')
+          .select('*, transactions_categories(name)')
           .eq('user_id', user.id)
           .gte('date', startDate)
           .lte('date', endDate);
 
         if (expensesErr) throw expensesErr;
 
-        // Fetch Investments for selected month
-        const { data: investments, error: investmentsErr } = await supabase
+        // Fetch Investment flows for selected month
+        const { data: invFlows, error: invFlowsErr } = await supabase
+          .from('investment_transactions')
+          .select('*, investiments_categories(name)')
+          .eq('user_id', user.id)
+          .gte('date', startDate)
+          .lte('date', endDate);
+        
+        if (invFlowsErr) throw invFlowsErr;
+        setInvestmentFlows(invFlows || []);
+
+        // Fetch Investment Assets for selected month
+        const { data: invAssets, error: invAssetsErr } = await supabase
           .from('investments')
           .select('*')
           .eq('user_id', user.id)
           .eq('reference_date', startDate); 
 
-        if (investmentsErr) throw investmentsErr;
-
+        if (invAssetsErr) throw invAssetsErr;
+        setInvestmentAssets(invAssets || []);
         // Fetch Budgets
         const { data: budgetData, error: budgetErr } = await supabase
-          .from('budgets')
-          .select('*, categories(name)')
+          .from('expense_budgets')
+          .select('*, transactions_categories(name)')
           .eq('user_id', user.id);
 
         if (budgetErr && budgetErr.code !== '42P01') throw budgetErr;
@@ -184,19 +198,19 @@ export default function DashboardPage() {
           evolutionPromises.push(
             Promise.all([
               supabase.from('incoming').select('amount').eq('user_id', user.id).gte('date', start).lte('date', end),
-              supabase.from('transactions').select('amount, categories(is_investment)').eq('user_id', user.id).gte('date', start).lte('date', end)
-            ]).then(([inc, exp]) => {
+              supabase.from('expense_transactions').select('amount').eq('user_id', user.id).gte('date', start).lte('date', end),
+              supabase.from('investment_transactions').select('amount').eq('user_id', user.id).gte('date', start).lte('date', end)
+            ]).then(([inc, exp, inv]) => {
               const incomeSum = inc.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0;
-              const totalExpSum = Math.abs(exp.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0);
-              const invExpSum = Math.abs(exp.data?.filter(e => e.categories?.is_investment === true).reduce((acc, curr) => acc + Number(curr.amount), 0) || 0);
-              const consumptionExpSum = totalExpSum - invExpSum;
+              const expSum = Math.abs(exp.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0);
+              const invSum = Math.abs(inv.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0);
 
               return {
-                month: months[d.getMonth()],
+                month: months[d.getUTCMonth()],
                 income: incomeSum,
-                expense: consumptionExpSum,
-                balance: incomeSum - totalExpSum,
-                investmentRate: incomeSum > 0 ? (invExpSum / incomeSum) * 100 : 0
+                expense: expSum,
+                balance: incomeSum - (expSum + invSum),
+                investmentRate: incomeSum > 0 ? (invSum / incomeSum) * 100 : 0
               };
             })
           );
@@ -207,7 +221,7 @@ export default function DashboardPage() {
               .eq('user_id', user.id)
               .eq('reference_date', start)
               .then(({ data }) => ({
-                month: months[d.getMonth()],
+                month: months[d.getUTCMonth()],
                 balance: data?.reduce((acc, curr) => acc + Number(curr.balance), 0) || 0
               }))
           );
@@ -220,7 +234,6 @@ export default function DashboardPage() {
 
         setIncomeData(income || []);
         setExpenseData(expenses || []);
-        setInvestmentData(investments || []);
         setEvolutionData(evolution);
         setEquityEvolutionData(equityEvolution);
         setBudgets(budgetData || []);
@@ -237,19 +250,15 @@ export default function DashboardPage() {
   const stats = useMemo(() => {
     const totalIncome = incomeData.reduce((acc, curr) => acc + Number(curr.amount), 0);
     
-    // Separate Investment contributions from Consumption expenses
-    const investmentTransactions = expenseData.filter(curr => curr.categories?.is_investment === true);
-    const consumptionTransactions = expenseData.filter(curr => curr.categories?.is_investment !== true);
-
-    const totalInvestmentFlow = Math.abs(investmentTransactions.reduce((acc, curr) => acc + Number(curr.amount), 0));
-    const totalConsumptionExpense = Math.abs(consumptionTransactions.reduce((acc, curr) => acc + Number(curr.amount), 0));
+    const totalInvestmentFlow = Math.abs(investmentFlows.reduce((acc, curr) => acc + Number(curr.amount), 0));
+    const totalConsumptionExpense = Math.abs(expenseData.reduce((acc, curr) => acc + Number(curr.amount), 0));
     const totalExpense = totalInvestmentFlow + totalConsumptionExpense;
     
     const balance = totalIncome - totalExpense;
     const investmentRate = totalIncome > 0 ? (totalInvestmentFlow / totalIncome) * 100 : 0;
 
-    const expenseByCategory = consumptionTransactions.reduce((acc: any, curr) => {
-      const catName = curr.categories?.name || 'Outros';
+    const expenseByCategory = expenseData.reduce((acc: any, curr) => {
+      const catName = curr.transactions_categories?.name || 'Outros';
       acc[catName] = (acc[catName] || 0) + Math.abs(Number(curr.amount));
       return acc;
     }, {});
@@ -259,7 +268,7 @@ export default function DashboardPage() {
       value: expenseByCategory[name]
     }));
 
-    const investmentByType = investmentData.reduce((acc: any, curr) => {
+    const investmentByType = investmentAssets.reduce((acc: any, curr) => {
       const type = curr.asset_type || 'Outros';
       acc[type] = (acc[type] || 0) + Number(curr.balance);
       return acc;
@@ -270,11 +279,11 @@ export default function DashboardPage() {
       value: investmentByType[name]
     }));
 
-    const totalEquity = investmentData.reduce((acc, curr) => acc + Number(curr.balance), 0);
+    const totalEquity = investmentAssets.reduce((acc, curr) => acc + Number(curr.balance), 0);
 
     // Budget vs Expenses Comparison
     const budgetAnalysis = budgets.map(b => {
-      const catName = b.categories?.name;
+      const catName = b.transactions_categories?.name;
       const spent = expenseByCategory[catName] || 0;
       const limit = Number(b.limit_amount);
       const percent = limit > 0 ? (spent / limit) * 100 : 0;
@@ -301,7 +310,7 @@ export default function DashboardPage() {
       isOverspent: totalExpense > totalIncome && totalIncome > 0,
       budgetAnalysis
     };
-  }, [incomeData, expenseData, investmentData, budgets]);
+  }, [incomeData, expenseData, investmentFlows, investmentAssets, budgets]);
 
   const isSupabaseConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL && 
                                process.env.NEXT_PUBLIC_SUPABASE_URL !== 'https://placeholder-project.supabase.co' &&

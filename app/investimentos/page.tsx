@@ -158,6 +158,19 @@ export default function InvestmentsPage() {
 
     setIsImporting(true);
     try {
+      // EXPLICIT DB CHECK TO BE SURE USER EXISTS IN public.users
+      const { data: dbUser, error: dbUserError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', user.id)
+        .maybeSingle();
+
+      if (dbUserError || !dbUser) {
+        alert('Sessão inválida ou perfil não encontrado. Por favor, faça login novamente.');
+        setIsImporting(false);
+        return;
+      }
+
       const reader = new FileReader();
       const fileData = await new Promise<string>((resolve) => {
         reader.onload = () => resolve((reader.result as string).split(',')[1]);

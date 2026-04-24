@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { SessionManager } from './SessionManager';
+import { getCircularReplacer } from '@/lib/utils';
 
 interface AppUser {
   id: string;
@@ -11,12 +12,13 @@ interface AppUser {
   email: string;
   photo_url?: string;
   status: 'Active' | 'Inactive';
+  session?: any; // Include Supabase session
 }
 
 interface AuthContextType {
   user: AppUser | null;
   loading: boolean;
-  login: (userData: AppUser) => void;
+  login: (userData: AppUser) => Promise<void>;
   signOut: () => Promise<void>;
   updateUser: (userData: Partial<AppUser>) => void;
 }
@@ -24,7 +26,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
-  login: () => {},
+  login: async () => {},
   signOut: async () => {},
   updateUser: () => {},
 });
@@ -43,13 +45,43 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         const storedUser = localStorage.getItem('app_user');
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
+
+          // Restore Supabase session if it exists in stored user data
+          if (parsedUser.session) {
+            try {
+              const { error } = await supabase.auth.setSession({
+                access_token: parsedUser.session.access_token,
+                refresh_token: parsedUser.session.refresh_token
+              });
+              if (error) console.warn('Failed to restore Supabase session:', error.message);
+            } catch (sessErr) {
+              console.error('Critical error restoring session:', sessErr);
+            }
+          }
           
-          // Verify user status in DB
+          // Verify user status in DB using standard client
+          // If RLS is enabled, this will only work if we have a valid session
           const { data, error } = await supabase
             .from('users')
             .select('*')
             .eq('id', parsedUser.id)
             .single();
+
+          if (error) {
+            console.error('Erro ao verificar usuário no banco:', error.message);
+            // If it's a permission error (PGRST301), it means session expired but user is in localstorage
+            if (error.code === 'PGRST301' || error.message.includes('permission denied')) {
+               console.warn('RLS bloqueou acesso. Redirecionando para login.');
+            }
+            
+            localStorage.removeItem('app_user');
+            setUser(null);
+            if (pathname !== '/' && pathname !== '/registrar') {
+              router.push('/');
+            }
+            setLoading(false);
+            return;
+          }
 
           if (data && data.status === 'Active') {
             setUser(data);
@@ -79,13 +111,29 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     checkUser();
   }, [router, pathname]);
 
-  const login = (userData: AppUser) => {
-    localStorage.setItem('app_user', JSON.stringify(userData));
+  const login = async (userData: AppUser) => {
+    // If a Supabase session was provided, set it in the client
+    if (userData.session) {
+      const { session } = userData;
+      const { error } = await supabase.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token
+      });
+      
+      if (error) {
+        console.error('Erro ao estabelecer sessão no Supabase:', error.message);
+      } else {
+        console.info('Sessão Supabase sincronizada com sucesso.');
+      }
+    }
+
+    localStorage.setItem('app_user', JSON.stringify(userData, getCircularReplacer()));
     setUser(userData);
     router.push('/painel');
   };
 
   const signOut = async () => {
+    await supabase.auth.signOut();
     localStorage.removeItem('app_user');
     setUser(null);
     router.push('/');
@@ -94,7 +142,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const updateUser = (userData: Partial<AppUser>) => {
     if (user) {
       const updatedUser = { ...user, ...userData };
-      localStorage.setItem('app_user', JSON.stringify(updatedUser));
+      localStorage.setItem('app_user', JSON.stringify(updatedUser, getCircularReplacer()));
       setUser(updatedUser);
     }
   };

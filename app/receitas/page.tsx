@@ -10,7 +10,7 @@ import { Filter, Download, Calendar, Tag, Upload, Loader2, ChevronLeft, ChevronR
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { GoogleGenAI, Type } from "@google/genai";
-import { cn, formatCurrency } from '@/lib/utils';
+import { cn, formatCurrency, getCircularReplacer } from '@/lib/utils';
 
 interface Transaction {
   id: string;
@@ -230,6 +230,25 @@ export default function Page() {
       console.error('Error fetching category:', catError);
     }
 
+    // Use user from custom context (useAuth)
+    if (!user?.id) {
+      alert('Sessão expirada. Por favor, faça login novamente.');
+      return;
+    }
+
+    // EXPLICIT DB CHECK TO BE SURE USER EXISTS IN public.users (Avoid dead sessions)
+    const { data: dbUser, error: dbUserError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (dbUserError || !dbUser) {
+       console.error('User not found in DB:', user.id, dbUserError);
+       alert('Erro Crítico: Seu perfil de usuário não foi encontrado no servidor.\nPor favor, faça LOGIN novamente.');
+       return;
+    }
+
     const payload = {
       description: data.description,
       amount: Math.abs(data.amount), // Ensure positive for income
@@ -238,32 +257,41 @@ export default function Page() {
       user_id: user.id,
     };
 
+    console.log('DEBUG: Custom User (Context):', user.id);
     console.log('Attempting to save income:', payload);
 
     if (data.id) {
-      const { error } = await supabase
+      const { data: updatedData, error } = await supabase
         .from('incoming')
         .update(payload)
         .eq('id', data.id)
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .select();
       
       if (error) {
         console.error('Error updating income:', error);
         alert('Erro ao atualizar receita: ' + error.message);
+      } else {
+        console.log('Update successful:', updatedData);
       }
     } else {
-      const { error } = await supabase
+      const { data: insertedData, error } = await supabase
         .from('incoming')
-        .insert([payload]);
+        .insert([payload])
+        .select();
       
       if (error) {
         console.error('Error inserting income:', error);
         console.error('Payload attempted:', payload);
-        alert('Erro ao inserir receita: ' + error.message + '\n\nDetalhes: ' + JSON.stringify(error));
+        alert('Erro ao inserir receita: ' + error.message + '\n\nDetalhes: ' + JSON.stringify(error, getCircularReplacer()));
+      } else {
+        console.log('Insert successful:', insertedData);
+        alert('Receita salva com sucesso!');
       }
     }
-    fetchAvailableMonths();
-    fetchTransactions();
+    await fetchAvailableMonths();
+    await fetchTransactions();
+    setIsModalOpen(false);
   };
 
   const handleDeleteTransaction = async (id: string) => {
@@ -371,7 +399,7 @@ export default function Page() {
         contents: [
           {
             parts: [
-              { text: `CONTEXTO DE ENTRADA: ${JSON.stringify({ auth_context: authContext })}` },
+              { text: `CONTEXTO DE ENTRADA: ${JSON.stringify({ auth_context: authContext }, getCircularReplacer())}` },
               { text: prompt },
               {
                 inlineData: {

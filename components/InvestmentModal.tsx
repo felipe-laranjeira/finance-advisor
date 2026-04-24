@@ -4,6 +4,8 @@ import React, { useState, useEffect } from 'react';
 import { X, TrendingUp, Landmark, Tag, DollarSign } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/components/AuthProvider';
 
 interface Investment {
   id?: string;
@@ -40,13 +42,39 @@ const parseCurrency = (value: string) => {
 };
 
 export function InvestmentModal({ isOpen, onClose, onSave, editingInvestment }: InvestmentModalProps) {
+  const [assetTypes, setAssetTypes] = useState<string[]>(['Ações', 'FIIs', 'Renda Fixa', 'Tesouro', 'Cripto', 'Outros']);
+  const { user } = useAuth();
+  
   const [formData, setFormData] = useState({
     asset_name: editingInvestment?.asset_name || '',
     broker: editingInvestment?.broker || '',
-    asset_type: editingInvestment?.asset_type || 'Renda Fixa',
+    asset_type: editingInvestment?.asset_type || '',
     balance: editingInvestment ? maskCurrency((editingInvestment.balance * 100).toFixed(0)) : '',
     reference_date: editingInvestment?.reference_date || new Date().toISOString().split('T')[0].substring(0, 7) + '-01',
   });
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      const { data } = await supabase
+        .from('investiments_categories')
+        .select('name')
+        .order('name');
+      
+      if (data && data.length > 0) {
+        setAssetTypes(data.map(c => c.name));
+        if (!formData.asset_type) {
+          setFormData(prev => ({ ...prev, asset_type: data[0].name }));
+        }
+      }
+    };
+    fetchCategories();
+  }, []);
+
+  useEffect(() => {
+    if (assetTypes.length > 0 && !formData.asset_type) {
+       setFormData(prev => ({ ...prev, asset_type: assetTypes[0] }));
+    }
+  }, [assetTypes]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -128,7 +156,7 @@ export function InvestmentModal({ isOpen, onClose, onSave, editingInvestment }: 
                         onChange={(e) => setFormData({ ...formData, asset_type: e.target.value })}
                         className="w-full pl-12 pr-6 py-4 bg-surface-container-high border-none rounded-2xl focus:ring-2 focus:ring-primary/20 transition-all font-bold appearance-none"
                       >
-                        {ASSET_TYPES.map((type) => (
+                        {assetTypes.map((type) => (
                           <option key={type} value={type}>{type}</option>
                         ))}
                       </select>

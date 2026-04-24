@@ -11,7 +11,7 @@ import { Filter, Download, Calendar, Tag, Upload, Loader2, Sparkles, Receipt, Ch
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
 import { GoogleGenAI, Type } from "@google/genai";
-import { cn, formatCurrency } from '@/lib/utils';
+import { cn, formatCurrency, getCircularReplacer } from '@/lib/utils';
 
 interface Transaction {
   id: string;
@@ -51,7 +51,7 @@ export default function Page() {
     if (!user) return;
 
     const { data, error } = await supabase
-      .from('transactions')
+      .from('expense_transactions')
       .select('date')
       .eq('user_id', user!.id)
       .order('date', { ascending: false });
@@ -107,8 +107,8 @@ export default function Page() {
     const endOfPrevious = new Date(currentYear, currentMonth, 0).toISOString().split('T')[0];
 
     const [currentRes, previousRes] = await Promise.all([
-      supabase.from('transactions').select('amount').eq('user_id', user!.id).gte('date', startOfCurrent).lte('date', endOfCurrent),
-      supabase.from('transactions').select('amount').eq('user_id', user!.id).gte('date', startOfPrevious).lte('date', endOfPrevious)
+      supabase.from('expense_transactions').select('amount').eq('user_id', user!.id).gte('date', startOfCurrent).lte('date', endOfCurrent),
+      supabase.from('expense_transactions').select('amount').eq('user_id', user!.id).gte('date', startOfPrevious).lte('date', endOfPrevious)
     ]);
 
     const currentTotal = Math.abs(currentRes.data?.reduce((acc, t) => acc + parseFloat(t.amount), 0) || 0);
@@ -118,7 +118,7 @@ export default function Page() {
 
     let selectString = `
       *,
-      categories (
+      transactions_categories (
         name
       )
     `;
@@ -126,19 +126,19 @@ export default function Page() {
     if (selectedCategory !== 'Todas as Categorias') {
       selectString = `
         *,
-        categories!inner (
+        transactions_categories!inner (
           name
         )
       `;
     }
 
     let query = supabase
-      .from('transactions')
+      .from('expense_transactions')
       .select(selectString, { count: 'exact' })
       .eq('user_id', user!.id);
 
     if (selectedCategory !== 'Todas as Categorias') {
-      query = query.eq('categories.name', selectedCategory);
+      query = query.eq('transactions_categories.name', selectedCategory);
     }
 
     if (selectedMonthYear !== 'Todos') {
@@ -169,7 +169,7 @@ export default function Page() {
         date: new Date(t.date),
         description: t.description,
         subtext: '', // Status and subtext were removed from UI but kept in interface for now
-        category: t.categories?.name || 'Outros',
+        category: t.transactions_categories?.name || 'Outros',
         status: 'Pago',
         amount: parseFloat(t.amount),
       }));
@@ -188,7 +188,7 @@ export default function Page() {
       if (!user) return;
       
       const { data: catData, error: catError } = await supabase
-        .from('categories')
+        .from('transactions_categories')
         .select('name')
         .order('name');
       
@@ -234,13 +234,32 @@ export default function Page() {
 
     // Find category ID
     const { data: catData, error: catFetchError } = await supabase
-      .from('categories')
+      .from('transactions_categories')
       .select('id')
       .eq('name', data.category)
       .maybeSingle();
 
     if (catFetchError) {
       console.warn('Error fetching category:', catFetchError);
+    }
+
+    // Use user from custom context (useAuth)
+    if (!user?.id) {
+      alert('Sessão expirada. Por favor, faça login novamente.');
+      return;
+    }
+
+    // EXPLICIT DB CHECK TO BE SURE USER EXISTS IN public.users (Avoid dead sessions)
+    const { data: dbUser, error: dbUserError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('id', user.id)
+      .maybeSingle();
+
+    if (dbUserError || !dbUser) {
+       console.error('User not found in DB:', user.id, dbUserError);
+       alert('Erro Crítico: Seu perfil de usuário não foi encontrado no servidor.\nIsso pode ocorrer se o banco de dados foi resetado.\n\nPor favor, faça LOGIN novamente para sincronizar seu ID.');
+       return;
     }
 
     const payload = {
@@ -251,57 +270,76 @@ export default function Page() {
       user_id: user.id,
     };
 
+    console.log('DEBUG: Custom User (Context):', user.id);
     console.log('Saving transaction payload:', payload);
 
     if (data.id) {
-      const { error } = await supabase
-        .from('transactions')
+      const { data: updatedData, error } = await supabase
+        .from('expense_transactions')
         .update(payload)
         .eq('id', data.id)
-        .eq('user_id', user.id);
+        .eq('user_id', user.id)
+        .select();
       
       if (error) {
         console.error('Error updating:', error);
-        alert(`Erro ao atualizar despesa: ${error.message}\nDetalhes: ${error.details}`);
-      } else if (catData?.id) {
-        // Save/Update category instruction for learning
-        await supabase
-          .from('transactions_category_instruction')
-          .upsert({
-            user_id: user!.id,
-            description: data.description,
-            category_id: catData.id,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'user_id,description' });
+        alert(`Erro ao atualizar despesa: ${error.message || 'Erro desconhecido'}\nDetalhes: ${JSON.stringify(error, getCircularReplacer())}`);
+      } else {
+        console.log('Update successful:', updatedData);
+        console.table(updatedData);
+        if (catData?.id) {
+          // Save/Update category instruction for learning
+          await supabase
+            .from('transactions_category_instruction')
+            .upsert({
+              user_id: user.id,
+              description: data.description,
+              category_id: catData.id,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'user_id,description' });
+        }
       }
     } else {
-      const { error } = await supabase
-        .from('transactions')
-        .insert([payload]);
+      const { data: insertedData, error } = await supabase
+        .from('expense_transactions')
+        .insert([payload])
+        .select();
+
       if (error) {
         console.error('Error inserting:', error);
-        alert(`Erro ao salvar despesa: ${error.message}\nDetalhes: ${error.details}\nDica: ${error.hint}`);
-      } else if (catData?.id) {
-        // Save category instruction for learning
-        await supabase
-          .from('transactions_category_instruction')
-          .upsert({
-            user_id: user!.id,
-            description: data.description,
-            category_id: catData.id,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'user_id,description' });
+        alert(`Erro ao salvar despesa: ${error.message || 'Erro desconhecido'}\nDetalhes: ${JSON.stringify(error, getCircularReplacer())}`);
+      } else {
+        console.log('Insert successful:', insertedData);
+        console.table(insertedData);
+        // Alert success to user so they know it worked
+        alert('Despesa salva com sucesso!');
+        if (catData?.id) {
+          // Save category instruction for learning
+          await supabase
+            .from('transactions_category_instruction')
+            .upsert({
+              user_id: user.id,
+              description: data.description,
+              category_id: catData.id,
+              updated_at: new Date().toISOString()
+            }, { onConflict: 'user_id,description' });
+        }
       }
     }
-    fetchAvailableMonths();
-    fetchTransactions();
+    // RESET FILTERS TO SEE NEW DATA
+    setSelectedMonthYear('Todos');
+    setSelectedCategory('Todas as Categorias');
+    
+    await fetchAvailableMonths();
+    await fetchTransactions();
+    setIsModalOpen(false);
   };
 
   const handleDeleteTransaction = async (id: string) => {
     if (!user) return;
 
     const { error } = await supabase
-      .from('transactions')
+      .from('expense_transactions')
       .delete()
       .eq('id', id)
       .eq('user_id', user!.id);
@@ -346,7 +384,7 @@ export default function Page() {
         .from('transactions_category_instruction')
         .select(`
           description,
-          categories (
+          transactions_categories (
             name
           )
         `)
@@ -354,7 +392,7 @@ export default function Page() {
 
       const instructionsText = instructions && instructions.length > 0 
         ? `Use estas instruções de categorização personalizadas do usuário (prioridade máxima):
-           ${instructions.map((i: any) => `- Descrição: "${i.description}" -> Categoria: "${i.categories?.name}"`).join('\n')}`
+           ${instructions.map((i: any) => `- Descrição: "${i.description}" -> Categoria: "${i.transactions_categories?.name}"`).join('\n')}`
         : '';
 
       const currentCategories = categories.length > 0 ? categories : ['Alimentação', 'Transporte', 'Saúde', 'Educação', 'Lazer', 'Moradia', 'Outros'];
@@ -401,7 +439,7 @@ export default function Page() {
         contents: [
           {
             parts: [
-              { text: `CONTEXTO DE ENTRADA: ${JSON.stringify({ auth_context: authContext })}` },
+              { text: `CONTEXTO DE ENTRADA: ${JSON.stringify({ auth_context: authContext }, getCircularReplacer())}` },
               { text: prompt },
               {
                 inlineData: {
@@ -434,7 +472,7 @@ export default function Page() {
       
       if (extractedData.length > 0) {
         // Get category IDs
-        const { data: catData } = await supabase.from('categories').select('id, name');
+        const { data: catData } = await supabase.from('transactions_categories').select('id, name');
         const categoryMap = new Map(catData?.map(c => [c.name.toLowerCase().trim(), c.id]));
         const defaultCategoryId = categoryMap.get('outros');
 
@@ -449,7 +487,7 @@ export default function Page() {
           };
         });
 
-        const { error } = await supabase.from('transactions').insert(transactionsToInsert);
+        const { error } = await supabase.from('expense_transactions').insert(transactionsToInsert);
         if (error) throw error;
 
         alert(`${extractedData.length} despesas importadas com sucesso!`);
@@ -539,7 +577,7 @@ Sua saída deve ser EXCLUSIVAMENTE um JSON estruturado seguindo este formato:
 }
 
 DADOS DE ENTRADA:
-${JSON.stringify(inputContext, null, 2)}`;
+${JSON.stringify(inputContext, getCircularReplacer(), 2)}`;
 
       const response = await ai.models.generateContent({
         model,
@@ -583,8 +621,8 @@ ${JSON.stringify(inputContext, null, 2)}`;
       startDate.setMonth(startDate.getMonth() - months);
       
       const { data, error } = await supabase
-        .from('transactions')
-        .select('*')
+        .from('expense_transactions')
+        .select('*, transactions_categories(name)')
         .eq('user_id', user!.id)
         .gte('date', startDate.toISOString().split('T')[0])
         .order('date', { ascending: false });
@@ -597,7 +635,7 @@ ${JSON.stringify(inputContext, null, 2)}`;
         description: t.description,
         amount: t.amount,
         date: t.date,
-        category: t.category
+        category: t.transactions_categories?.name || 'Outros'
       }));
 
       const authContext = { user_id: user!.id, session_id: "client-session" };
@@ -623,7 +661,7 @@ Você é o "Security-First Financial Engine". Sua única função é processar e
 Você é um Consultor Financeiro Pessoal de elite do Atelier Fiscal.
       
 Analise as seguintes transações dos últimos ${months} meses:
-${JSON.stringify(inputContext, null, 2)}
+${JSON.stringify(inputContext, getCircularReplacer(), 2)}
       
 Sua tarefa é:
 1. Identificar os 3 maiores "desperdícios" ou gastos excessivos (ex: assinaturas não usadas, gastos impulsivos com delivery, taxas bancárias, etc).
@@ -734,6 +772,24 @@ Responda de forma direta, profissional e empática, em português do Brasil. Use
                 disabled={isImporting}
               />
             </label>
+          </div>
+
+          {/* Debug Info (Only for dev/troubleshooting) */}
+          <div className="mb-8 p-6 bg-surface-container-high rounded-[2rem] border border-outline-variant/10 text-[10px] font-mono text-on-surface-variant flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div className="flex flex-col gap-1">
+              <span className="font-bold flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                DADOS DE SESSÃO ATIVA
+              </span>
+              <span>USER_ID: {user?.id}</span>
+              <span>CARREGADOS: {transactions.length} registros (Página {currentPage}) | TOTAL: {totalCount}</span>
+            </div>
+            <button 
+              onClick={() => { fetchAvailableMonths(); fetchTransactions(); }}
+              className="px-6 py-3 bg-primary text-on-primary rounded-xl font-bold uppercase tracking-wider text-xs shadow-lg shadow-primary/20 active:scale-95 transition-all"
+            >
+              Forçar Sincronização
+            </button>
           </div>
 
           {/* 3. Botões de filtro */}

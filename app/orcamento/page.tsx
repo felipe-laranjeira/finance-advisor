@@ -58,30 +58,30 @@ export default function BudgetPage() {
     setLoading(true);
     
     try {
-      // Fetch all expense categories with investment flag
-      const { data: catData, error: catError } = await supabase
-        .from('categories')
-        .select('id, name, is_investment')
-        .order('name');
+      // Fetch separated categories
+      const [{ data: expCats }, { data: invCats }] = await Promise.all([
+        supabase.from('transactions_categories').select('id, name').order('name'),
+        supabase.from('investiments_categories').select('id, name').order('name')
+      ]);
 
-      if (catError) throw catError;
-      setCategories(catData || []);
+      const allCategories = [
+        ...(expCats?.map(c => ({ ...c, is_investment: false })) || []),
+        ...(invCats?.map(c => ({ ...c, is_investment: true })) || [])
+      ];
+      setCategories(allCategories as any);
 
-      // Fetch user's budget limits
-      const { data: budgetData, error: budgetError } = await supabase
-        .from('budgets')
-        .select('category_id, limit_amount')
-        .eq('user_id', user.id);
+      // Fetch separated budgets
+      const [{ data: expBuds }, { data: invBuds }] = await Promise.all([
+        supabase.from('expense_budgets').select('category_id, limit_amount').eq('user_id', user.id),
+        supabase.from('investment_budgets').select('category_id, limit_amount').eq('user_id', user.id)
+      ]);
 
-      if (budgetError) {
-        if (budgetError.code === '42P01') {
-          console.warn('Budgets table does not exist yet.');
-        } else {
-          throw budgetError;
-        }
-      }
+      const allBudgets = [
+        ...(expBuds || []),
+        ...(invBuds || [])
+      ];
       
-      setBudgets(budgetData || []);
+      setBudgets(allBudgets);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -130,8 +130,11 @@ export default function BudgetPage() {
     setSaving(categoryId);
     
     try {
+      const isInvestment = categories.find(c => c.id === categoryId)?.is_investment;
+      const tableName = isInvestment ? 'investment_budgets' : 'expense_budgets';
+
       const { error } = await supabase
-        .from('budgets')
+        .from(tableName)
         .upsert({
           user_id: user.id,
           category_id: categoryId,

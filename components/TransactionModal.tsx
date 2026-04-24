@@ -55,11 +55,13 @@ export function TransactionModal({ isOpen, onClose, onSave, editingTransaction, 
   useEffect(() => {
     let mounted = true;
     const fetchCategories = async () => {
-      const categoryTable = type === 'income' ? 'incoming_categories' : 'categories';
+      let categoryTable = 'transactions_categories';
+      if (type === 'income') categoryTable = 'incoming_categories';
+      if (type === 'investment') categoryTable = 'investiments_categories';
       
       let query = supabase
         .from(categoryTable)
-        .select(categoryTable === 'categories' ? 'name, is_investment' : 'name')
+        .select('name')
         .order('name');
       
       const { data, error } = await query;
@@ -68,9 +70,11 @@ export function TransactionModal({ isOpen, onClose, onSave, editingTransaction, 
         console.error(`Error fetching ${categoryTable}:`, error);
         if (mounted) {
           const fallbacks = type === 'income' 
-            ? ['Salário', 'Freelance', 'Dividendos', 'Aluguel', 'Investimentos', 'Outros'].map(n => ({ name: n, is_investment: false }))
-            : ['Alimentação', 'Transporte', 'Saúde', 'Educação', 'Lazer', 'Moradia', 'Outros'].map(n => ({ name: n, is_investment: false }));
-          setCategories(fallbacks);
+            ? ['Salário', 'Freelance', 'Dividendos', 'Aluguel', 'Investimentos', 'Outros'].map(n => ({ name: n }))
+            : (type === 'investment' 
+                ? ['Ações', 'FIIs', 'Cripto', 'Tesouro Direto', 'Reserva de Emergência'].map(n => ({ name: n }))
+                : ['Alimentação', 'Transporte', 'Saúde', 'Educação', 'Lazer', 'Moradia', 'Outros'].map(n => ({ name: n })));
+          setCategories(fallbacks as any);
         }
         return;
       }
@@ -78,7 +82,7 @@ export function TransactionModal({ isOpen, onClose, onSave, editingTransaction, 
       if (data && mounted) {
         setCategories(data.map((c: any) => ({
           name: c.name,
-          is_investment: c.is_investment || false
+          is_investment: type === 'investment'
         })));
       }
     };
@@ -87,11 +91,8 @@ export function TransactionModal({ isOpen, onClose, onSave, editingTransaction, 
   }, [type]);
 
   const filteredCategories = useMemo(() => {
-    if (type === 'income') return categories;
-    if (type === 'investment') return categories.filter(c => c.is_investment);
-    // If type is expense, we only show non-investment categories
-    return categories.filter(c => !c.is_investment);
-  }, [categories, type]);
+    return categories;
+  }, [categories]);
 
   // Set default category if current one is not in filtered list
   useEffect(() => {

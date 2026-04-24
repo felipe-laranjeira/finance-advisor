@@ -191,6 +191,9 @@ export function TopBar() {
                     <p className="text-xs font-bold text-on-surface-variant uppercase tracking-widest mb-1">Perfil</p>
                     <p className="text-sm font-bold text-on-surface truncate">{user?.name}</p>
                     <p className="text-[11px] text-on-surface-variant truncate">{user?.email}</p>
+                    <div className="mt-2 text-[9px] font-mono text-on-surface-variant/40 bg-surface-container-highest px-2 py-1 rounded-md break-all">
+                      ID: {user?.id}
+                    </div>
                   </div>
                   
                   <div className="p-1 space-y-1">

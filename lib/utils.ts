@@ -15,3 +15,16 @@ export const formatCurrency = (value: number) => {
 export const formatDate = (date: Date) => {
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(date);
 };
+
+export const getCircularReplacer = () => {
+  const seen = new WeakSet();
+  return (key: string, value: any) => {
+    if (typeof value === "object" && value !== null) {
+      if (seen.has(value)) {
+        return "[Circular]";
+      }
+      seen.add(value);
+    }
+    return value;
+  };
+};
