@@ -59,14 +59,19 @@ export default function BudgetPage() {
     
     try {
       // Fetch separated categories
-      const [{ data: expCats }, { data: invCats }] = await Promise.all([
-        supabase.from('transactions_categories').select('id, name').order('name'),
-        supabase.from('investiments_categories').select('id, name').order('name')
+      // Regra: Não ler todas as categorias de investimentos apenas a fixa "Investimentos"
+      // Regra: Exibir todas as categorias de despesas exceto "Investimentos"
+      const [{ data: expCatsData }, { data: invCatsData }] = await Promise.all([
+        supabase.from('transactions_categories').select('id, name').neq('name', 'Investimentos').order('name'),
+        supabase.from('investiments_categories').select('id, name').eq('name', 'Investimentos').limit(1)
       ]);
 
+      const expCats = expCatsData || [];
+      const invCats = invCatsData || [];
+
       const allCategories = [
-        ...(expCats?.map(c => ({ ...c, is_investment: false })) || []),
-        ...(invCats?.map(c => ({ ...c, is_investment: true })) || [])
+        ...(expCats.map(c => ({ ...c, is_investment: false }))),
+        ...(invCats.map(c => ({ ...c, is_investment: true })))
       ];
       setCategories(allCategories as any);
 
