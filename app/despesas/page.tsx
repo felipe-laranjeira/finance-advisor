@@ -774,23 +774,6 @@ Responda de forma direta, profissional e empática, em português do Brasil. Use
             </label>
           </div>
 
-          {/* Debug Info (Only for dev/troubleshooting) */}
-          <div className="mb-8 p-6 bg-surface-container-high rounded-[2rem] border border-outline-variant/10 text-[10px] font-mono text-on-surface-variant flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-            <div className="flex flex-col gap-1">
-              <span className="font-bold flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                DADOS DE SESSÃO ATIVA
-              </span>
-              <span>USER_ID: {user?.id}</span>
-              <span>CARREGADOS: {transactions.length} registros (Página {currentPage}) | TOTAL: {totalCount}</span>
-            </div>
-            <button 
-              onClick={() => { fetchAvailableMonths(); fetchTransactions(); }}
-              className="px-6 py-3 bg-primary text-on-primary rounded-xl font-bold uppercase tracking-wider text-xs shadow-lg shadow-primary/20 active:scale-95 transition-all"
-            >
-              Forçar Sincronização
-            </button>
-          </div>
 
           {/* 3. Botões de filtro */}
           <div className="flex flex-wrap items-center gap-4 mb-8">

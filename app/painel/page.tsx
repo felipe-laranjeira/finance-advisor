@@ -198,19 +198,32 @@ export default function DashboardPage() {
           evolutionPromises.push(
             Promise.all([
               supabase.from('incoming').select('amount').eq('user_id', user.id).gte('date', start).lte('date', end),
-              supabase.from('expense_transactions').select('amount').eq('user_id', user.id).gte('date', start).lte('date', end),
+              supabase.from('expense_transactions').select('amount, transactions_categories(name)').eq('user_id', user.id).gte('date', start).lte('date', end),
               supabase.from('investment_transactions').select('amount').eq('user_id', user.id).gte('date', start).lte('date', end)
             ]).then(([inc, exp, inv]) => {
               const incomeSum = inc.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0;
-              const expSum = Math.abs(exp.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0);
-              const invSum = Math.abs(inv.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0);
+              
+              let totalExpTableFlow = 0;
+              let expInvSum = 0;
+              exp.data?.forEach(item => {
+                const amt = Math.abs(Number(item.amount));
+                totalExpTableFlow += amt;
+                if (item.transactions_categories?.name === 'Investimentos') {
+                  expInvSum += amt;
+                }
+              });
+
+              const invTableSum = Math.abs(inv.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0);
+              
+              const consumptionSum = totalExpTableFlow - expInvSum;
+              const totalInvestedSum = invTableSum + expInvSum;
 
               return {
                 month: months[d.getUTCMonth()],
                 income: incomeSum,
-                expense: expSum,
-                balance: incomeSum - (expSum + invSum),
-                investmentRate: incomeSum > 0 ? (invSum / incomeSum) * 100 : 0
+                expense: totalExpTableFlow,
+                balance: incomeSum - (totalExpTableFlow + invTableSum),
+                investmentRate: incomeSum > 0 ? (totalInvestedSum / incomeSum) * 100 : 0
               };
             })
           );
@@ -248,14 +261,26 @@ export default function DashboardPage() {
   }, [user, selectedMonth, selectedYear]);
 
   const stats = useMemo(() => {
+    // Regra 1: Soma das receitas
     const totalIncome = incomeData.reduce((acc, curr) => acc + Number(curr.amount), 0);
     
-    const totalInvestmentFlow = Math.abs(investmentFlows.reduce((acc, curr) => acc + Number(curr.amount), 0));
-    const totalConsumptionExpense = Math.abs(expenseData.reduce((acc, curr) => acc + Number(curr.amount), 0));
-    const totalExpense = totalInvestmentFlow + totalConsumptionExpense;
+    // Regra 2 & 4: Segregar despesas de investimento
+    const totalExpFromTable = expenseData.reduce((acc, curr) => acc + Math.abs(Number(curr.amount)), 0);
+    const expenseInvestments = expenseData
+      .filter(curr => curr.transactions_categories?.name === 'Investimentos')
+      .reduce((acc, curr) => acc + Math.abs(Number(curr.amount)), 0);
     
+    const investmentFlowFromTable = Math.abs(investmentFlows.reduce((acc, curr) => acc + Number(curr.amount), 0));
+    
+    const totalConsumptionExpense = totalExpFromTable - expenseInvestments;
+    const totalInvested = investmentFlowFromTable + expenseInvestments;
+    
+    // Regra 3: Saldo Livre
+    const totalExpense = totalExpFromTable + investmentFlowFromTable;
     const balance = totalIncome - totalExpense;
-    const investmentRate = totalIncome > 0 ? (totalInvestmentFlow / totalIncome) * 100 : 0;
+    
+    // Regra 4: Taxa de Aporte
+    const investmentRate = totalIncome > 0 ? (totalInvested / totalIncome) * 100 : 0;
 
     const expenseByCategory = expenseData.reduce((acc: any, curr) => {
       const catName = curr.transactions_categories?.name || 'Outros';
@@ -300,7 +325,7 @@ export default function DashboardPage() {
     return {
       totalIncome,
       totalExpense,
-      totalInvestmentFlow,
+      totalInvested,
       totalConsumptionExpense,
       investmentRate,
       balance,
@@ -535,7 +560,7 @@ export default function DashboardPage() {
                     {stats.investmentRate.toFixed(1)}%
                   </h2>
                   <p className="text-[10px] font-medium opacity-90 truncate">
-                    Investiu {formatCurrency(stats.totalInvestmentFlow)}
+                    Investiu {formatCurrency(stats.totalInvested)}
                   </p>
                 </div>
                 <div className="h-16 w-32 mb-1">
@@ -589,8 +614,8 @@ export default function DashboardPage() {
                       formatter={(value: any) => formatCurrency(Number(value))}
                     />
                     <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ paddingBottom: '20px' }} />
-                    <Bar dataKey="income" name="Receita" fill="#006b5f" radius={[6, 6, 0, 0]} barSize={12} />
-                    <Bar dataKey="expense" name="Despesa" fill="#68151b" radius={[6, 6, 0, 0]} barSize={12} />
+                    <Bar dataKey="income" name="Entradas" fill="#006b5f" radius={[6, 6, 0, 0]} barSize={12} />
+                    <Bar dataKey="expense" name="Saídas" fill="#68151b" radius={[6, 6, 0, 0]} barSize={12} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
