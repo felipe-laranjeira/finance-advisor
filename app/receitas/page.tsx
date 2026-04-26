@@ -400,7 +400,6 @@ export default function Page() {
         2. Descrição (nome da fonte pagadora ou serviço)
         3. Valor (número positivo representando a receita)
         4. Categoria (tente mapear para uma destas: ${currentCategories.join(', ')}. Se não tiver certeza, use "Outros").
-        5. Tipo (mapeie como "ativa" para salários/serviços ou "passiva" para dividendos/aluguéis/investimentos).
 
         ${instructionsText}
 
@@ -411,7 +410,7 @@ export default function Page() {
 
         Retorne APENAS um array JSON válido, sem formatação markdown, seguindo este esquema:
         [
-          { "date": "2024-03-26", "description": "Salário", "amount": 5000.00, "category": "Salário", "type": "ativa" }
+          { "date": "2024-03-26", "description": "Salário", "amount": 5000.00, "category": "Salário" }
         ]
         Se não encontrar receitas, retorne um array vazio [].
       `;
@@ -443,10 +442,9 @@ export default function Page() {
                 date: { type: Type.STRING },
                 description: { type: Type.STRING },
                 amount: { type: Type.NUMBER },
-                category: { type: Type.STRING },
-                type: { type: Type.STRING }
+                category: { type: Type.STRING }
               },
-              required: ["date", "description", "amount", "category", "type"]
+              required: ["date", "description", "amount", "category"]
             }
           }
         }
@@ -467,7 +465,6 @@ export default function Page() {
             date: item.date,
             category_id: categoryMap.get(categoryName) || defaultCategoryId,
             user_id: user!.id,
-            type: item.type === 'passiva' ? 'passiva' : 'ativa',
           };
         });
 
