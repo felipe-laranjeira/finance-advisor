@@ -28,7 +28,8 @@ import {
   Calendar,
   ArrowUpRight,
   ArrowDownRight,
-  DollarSign
+  DollarSign,
+  CheckCircle2
 } from 'lucide-react';
 import { cn, formatCurrency } from '@/lib/utils';
 
@@ -51,7 +52,9 @@ export default function DashboardPage() {
   const [evolutionData, setEvolutionData] = useState<any[]>([]);
   const [equityEvolutionData, setEquityEvolutionData] = useState<any[]>([]);
   const [budgets, setBudgets] = useState<any[]>([]);
+  const [invBudgets, setInvBudgets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [hasData, setHasData] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -73,47 +76,50 @@ export default function DashboardPage() {
     const setInitialMonth = async () => {
       if (!user) return;
       
-      const [latestInc, latestExp, latestInv] = await Promise.all([
-        supabase.from('incoming').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(1),
-        supabase.from('expense_transactions').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(1),
-        supabase.from('investment_transactions').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(1)
-      ]);
+      const isConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL && 
+                           process.env.NEXT_PUBLIC_SUPABASE_URL !== 'https://placeholder-project.supabase.co';
+      
+      if (!isConfigured) return;
 
-      const hasAnyData = (latestInc.data && latestInc.data.length > 0) || 
-                        (latestExp.data && latestExp.data.length > 0) ||
-                        (latestInv.data && latestInv.data.length > 0);
-      setHasData(hasAnyData);
+      try {
+        const [latestInc, latestExp, latestInv] = await Promise.all([
+          supabase.from('incoming').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(1),
+          supabase.from('expense_transactions').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(1),
+          supabase.from('investment_transactions').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(1)
+        ]);
 
-      if (hasAnyData) {
-        let dates: Date[] = [];
-        if (latestInc.data?.[0]?.date) dates.push(new Date(latestInc.data[0].date));
-        if (latestExp.data?.[0]?.date) dates.push(new Date(latestExp.data[0].date));
-        if (latestInv.data?.[0]?.date) dates.push(new Date(latestInv.data[0].date));
+        const hasAnyData = (latestInc.data && latestInc.data.length > 0) || 
+                          (latestExp.data && latestExp.data.length > 0) ||
+                          (latestInv.data && latestInv.data.length > 0);
+        setHasData(hasAnyData);
 
-        let latestDate = dates.length > 0 ? new Date(Math.max(...dates.map(d => d.getTime()))) : null;
+        if (hasAnyData) {
+          let dates: Date[] = [];
+          if (latestInc.data?.[0]?.date) dates.push(new Date(latestInc.data[0].date));
+          if (latestExp.data?.[0]?.date) dates.push(new Date(latestExp.data[0].date));
+          if (latestInv.data?.[0]?.date) dates.push(new Date(latestInv.data[0].date));
 
-        if (latestDate) {
-          const now = new Date();
-          const currentMonth = now.getUTCMonth();
-          const currentYear = now.getUTCFullYear();
-          
-          // Check if current month has data (we'd need another query or just check if latestDate is current month)
-          // To be simple and follow the rule: if latest data is older than current month, use latest.
-          // If latest data is current month or newer, use current month.
-          
-          const latestMonth = latestDate.getUTCMonth();
-          const latestYear = latestDate.getUTCFullYear();
+          let latestDate = dates.length > 0 ? new Date(Math.max(...dates.map(d => d.getTime()))) : null;
 
-          // If there's data for the current month or future, show current month
-          // Otherwise show the most recent month with data
-          if (latestYear > currentYear || (latestYear === currentYear && latestMonth >= currentMonth)) {
-            setSelectedMonth(currentMonth);
-            setSelectedYear(currentYear);
-          } else {
-            setSelectedMonth(latestMonth);
-            setSelectedYear(latestYear);
+          if (latestDate) {
+            const now = new Date();
+            const currentMonth = now.getUTCMonth();
+            const currentYear = now.getUTCFullYear();
+            
+            const latestMonth = latestDate.getUTCMonth();
+            const latestYear = latestDate.getUTCFullYear();
+
+            if (latestYear > currentYear || (latestYear === currentYear && latestMonth >= currentMonth)) {
+              setSelectedMonth(currentMonth);
+              setSelectedYear(currentYear);
+            } else {
+              setSelectedMonth(latestMonth);
+              setSelectedYear(latestYear);
+            }
           }
         }
+      } catch (err) {
+        console.error('Erro ao definir mês inicial:', err);
       }
     };
     setInitialMonth();
@@ -133,6 +139,7 @@ export default function DashboardPage() {
       }
 
       setLoading(true);
+      setError(null);
 
       try {
         const startDate = new Date(selectedYear, selectedMonth, 1).toISOString().split('T')[0];
@@ -179,12 +186,10 @@ export default function DashboardPage() {
         if (invAssetsErr) throw invAssetsErr;
         setInvestmentAssets(invAssets || []);
         // Fetch Budgets
-        const { data: budgetData, error: budgetErr } = await supabase
-          .from('expense_budgets')
-          .select('*, transactions_categories(name)')
-          .eq('user_id', user.id);
-
-        if (budgetErr && budgetErr.code !== '42P01') throw budgetErr;
+        const [{ data: budgetData }, { data: invBudgetData }] = await Promise.all([
+          supabase.from('expense_budgets').select('*, transactions_categories(name)').eq('user_id', user.id),
+          supabase.from('investment_budgets').select('*, investiments_categories(name)').eq('user_id', user.id)
+        ]);
 
         // Fetch Monthly Evolution (last 12 months)
         const evolutionPromises = [];
@@ -252,8 +257,14 @@ export default function DashboardPage() {
         setEvolutionData(evolution);
         setEquityEvolutionData(equityEvolution);
         setBudgets(budgetData || []);
-      } catch (err) {
+        setInvBudgets(invBudgetData || []);
+      } catch (err: any) {
         console.error('Erro ao buscar dados do painel:', err);
+        if (err.message === 'Failed to fetch') {
+          setError('Não foi possível conectar ao banco de dados. Verifique suas configurações e conexão.');
+        } else {
+          setError('Ocorreu um erro ao carregar os dados. Tente novamente mais tarde.');
+        }
       } finally {
         setLoading(false);
       }
@@ -329,6 +340,14 @@ export default function DashboardPage() {
       };
     }).filter(b => b.limit > 0);
 
+    // Investment Goal Analysis
+    const investmentBudgetEntry = invBudgets.find(b => 
+      b.investiments_categories?.name === 'Investimentos'
+    );
+    const investmentGoal = investmentBudgetEntry ? Number(investmentBudgetEntry.limit_amount) : 0;
+    const invPercent = investmentGoal > 0 ? (totalInvested / investmentGoal) * 100 : 0;
+    const invRemainingPercent = Math.max(0, 100 - invPercent);
+
     return {
       totalIncome,
       totalExpense,
@@ -340,9 +359,12 @@ export default function DashboardPage() {
       investmentPieData,
       totalEquity,
       isOverspent: totalExpense > totalIncome && totalIncome > 0,
-      budgetAnalysis
+      budgetAnalysis,
+      investmentGoal,
+      invPercent,
+      invRemainingPercent
     };
-  }, [incomeData, expenseData, investmentFlows, investmentAssets, budgets]);
+  }, [incomeData, expenseData, investmentFlows, investmentAssets, budgets, invBudgets]);
 
   const isSupabaseConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL && 
                                process.env.NEXT_PUBLIC_SUPABASE_URL !== 'https://placeholder-project.supabase.co' &&
@@ -409,7 +431,25 @@ export default function DashboardPage() {
             </div>
           </div>
           
-          {hasData === false && !loading && (
+          {error && (
+            <div className="p-6 bg-error-container text-on-error-container rounded-3xl border border-error/20 flex flex-col md:flex-row items-center gap-6 shadow-xl shadow-error/5">
+              <div className="w-16 h-16 bg-error text-white rounded-2xl flex items-center justify-center shrink-0">
+                <AlertCircle size={32} />
+              </div>
+              <div className="text-center md:text-left flex-1">
+                <h3 className="text-xl font-black font-headline mb-1">Ops! Algo deu errado</h3>
+                <p className="font-medium opacity-90">{error}</p>
+              </div>
+              <button 
+                onClick={() => window.location.reload()}
+                className="px-8 py-3 bg-error text-white font-bold rounded-xl hover:scale-95 transition-all shadow-lg shadow-error/20"
+              >
+                Tentar Novamente
+              </button>
+            </div>
+          )}
+
+          {hasData === false && !loading && !error && (
             <div className="flex flex-col items-center justify-center py-20 bg-surface-container-low rounded-[2.5rem] border border-dashed border-outline-variant/30">
               <div className="w-20 h-20 bg-surface-container-high rounded-full flex items-center justify-center mb-6">
                 <DollarSign size={40} className="text-on-surface-variant/30" />
@@ -771,6 +811,102 @@ export default function DashboardPage() {
               </div>
             </div>
           </div>
+
+          {/* Investment Goals */}
+          {hasData && stats.investmentGoal > 0 && (
+            <div className="bg-surface-container-low p-8 rounded-[2.5rem] border border-outline-variant/10">
+              <div className="mb-8">
+                <h3 className="text-xl font-black font-headline text-primary tracking-tight">Metas de Investimento</h3>
+                <p className="text-sm text-on-surface-variant font-medium">Acompanhamento do seu aporte mensal em {months[selectedMonth]}</p>
+              </div>
+              
+              <div className={cn(
+                "w-full mb-8",
+                "h-40"
+              )}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart 
+                    data={[{
+                      name: 'Investimentos',
+                      investido: stats.totalInvested,
+                      meta: stats.investmentGoal,
+                      percent: stats.invPercent
+                    }]} 
+                    layout="vertical" 
+                  >
+                    <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} stroke="#e0e3e6" />
+                    <XAxis type="number" hide />
+                    <YAxis 
+                      dataKey="name" 
+                      type="category" 
+                      axisLine={false} 
+                      tickLine={false} 
+                      tick={{ fill: '#434652', fontSize: 10, fontWeight: 700 }}
+                      width={100}
+                    />
+                    <Tooltip 
+                      cursor={{ fill: '#f2f4f7' }}
+                      contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
+                      formatter={(value: any, name: any) => [formatCurrency(Number(value)), name]}
+                    />
+                    <Legend 
+                      verticalAlign="top" 
+                      align="right" 
+                      wrapperStyle={{ paddingBottom: '20px', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}
+                    />
+                    <Bar dataKey="meta" name="Meta" fill="#e0e3e6" radius={[0, 4, 4, 0]} barSize={40} />
+                    <Bar dataKey="investido" name="Investido" radius={[0, 4, 4, 0]} barSize={40}>
+                      <Cell 
+                        fill={stats.invPercent >= 100 ? '#006b5f' : stats.invPercent >= 80 ? '#f9a825' : '#003178'} 
+                      />
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              {/* Investment Alert Message */}
+              <motion.div 
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className={cn(
+                  "p-6 rounded-2xl flex items-center gap-4 border shadow-sm",
+                  stats.invPercent >= 100 
+                    ? "bg-secondary/10 text-on-secondary-container border-secondary/20" 
+                    : stats.invPercent >= 80 
+                      ? "bg-warning-container text-on-warning-container border-warning/20" 
+                      : "bg-surface-container-high text-on-surface-variant border-outline-variant/10"
+                )}
+                style={stats.invPercent >= 80 && stats.invPercent < 100 ? { backgroundColor: '#fff9c4', color: '#f57f17', borderColor: 'rgba(245, 127, 23, 0.2)' } : {}}
+              >
+                <div className={cn(
+                  "p-2 rounded-xl",
+                  stats.invPercent >= 100 ? "bg-secondary text-white" : "bg-primary/10 text-primary"
+                )}>
+                  {stats.invPercent >= 100 ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
+                </div>
+                <div className="flex-1">
+                  <p className="font-bold text-sm">
+                    {stats.invPercent < 80 
+                      ? `Não esqueça da sua meta de investimento, ainda faltam ${stats.invRemainingPercent.toFixed(1)}%` 
+                      : stats.invPercent < 100 
+                        ? "Falta pouco, você consegue!" 
+                        : "Parabéns! Você superou a sua meta de investimento para esse mês"}
+                  </p>
+                  <div className="flex items-center gap-4 mt-2">
+                    <div className="flex-1 h-2 bg-black/5 rounded-full overflow-hidden">
+                      <div 
+                        className={cn("h-full", stats.invPercent >= 100 ? "bg-secondary" : stats.invPercent >= 80 ? "bg-amber-600" : "bg-primary")} 
+                        style={{ width: `${Math.min(stats.invPercent, 100)}%` }} 
+                      />
+                    </div>
+                    <span className="text-xs font-black uppercase tracking-widest whitespace-nowrap">
+                      {stats.invPercent.toFixed(1)}% atingido
+                    </span>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+          )}
 
           {/* Budget Analysis Table & Chart */}
           {hasData && stats.budgetAnalysis.length > 0 && (

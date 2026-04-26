@@ -49,11 +49,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           // Restore Supabase session if it exists in stored user data
           if (parsedUser.session) {
             try {
-              const { error } = await supabase.auth.setSession({
+              const { error: sessionError } = await supabase.auth.setSession({
                 access_token: parsedUser.session.access_token,
                 refresh_token: parsedUser.session.refresh_token
               });
-              if (error) console.warn('Failed to restore Supabase session:', error.message);
+              
+              if (sessionError) {
+                console.warn('Failed to restore Supabase session:', sessionError.message);
+                if (sessionError.message.includes('Refresh Token Not Found') || sessionError.message.includes('invalid_grant')) {
+                  localStorage.removeItem('app_user');
+                  setUser(null);
+                  setLoading(false);
+                  if (pathname !== '/' && pathname !== '/registrar') {
+                    router.push('/');
+                  }
+                  return;
+                }
+              }
             } catch (sessErr) {
               console.error('Critical error restoring session:', sessErr);
             }

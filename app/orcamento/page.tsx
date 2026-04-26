@@ -55,6 +55,15 @@ export default function BudgetPage() {
 
   const fetchData = useCallback(async () => {
     if (!user) return;
+
+    const isConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL && 
+                         process.env.NEXT_PUBLIC_SUPABASE_URL !== 'https://placeholder-project.supabase.co';
+    
+    if (!isConfigured) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     
     try {

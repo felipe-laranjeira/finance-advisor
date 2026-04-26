@@ -50,64 +50,87 @@ export default function InvestmentsPage() {
 
   const fetchAvailableMonths = useCallback(async () => {
     if (!user) return;
+
+    const isConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL && 
+                         process.env.NEXT_PUBLIC_SUPABASE_URL !== 'https://placeholder-project.supabase.co';
     
-    const { data, error } = await supabase
-      .from('investments')
-      .select('reference_date')
-      .eq('user_id', user.id);
+    if (!isConfigured) return;
 
-    if (error) {
-      console.error('Error fetching months:', error);
-      return;
+    try {
+      const { data, error } = await supabase
+        .from('investments')
+        .select('reference_date')
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error fetching months:', error);
+        return;
+      }
+
+      const months = new Set<string>();
+      data?.forEach((item: any) => {
+        const date = new Date(item.reference_date);
+        const monthYear = `${monthNames[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+        months.add(monthYear);
+      });
+
+      setAvailableMonths(Array.from(months).sort((a, b) => {
+        const [mA, yA] = a.split(' ');
+        const [mB, yB] = b.split(' ');
+        const dateA = new Date(parseInt(yA), monthNames.indexOf(mA));
+        const dateB = new Date(parseInt(yB), monthNames.indexOf(mB));
+        return dateB.getTime() - dateA.getTime();
+      }));
+    } catch (err) {
+      console.error('Erro de conexão ao buscar meses:', err);
     }
-
-    const months = new Set<string>();
-    data?.forEach((item: any) => {
-      const date = new Date(item.reference_date);
-      const monthYear = `${monthNames[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
-      months.add(monthYear);
-    });
-
-    setAvailableMonths(Array.from(months).sort((a, b) => {
-      const [mA, yA] = a.split(' ');
-      const [mB, yB] = b.split(' ');
-      const dateA = new Date(parseInt(yA), monthNames.indexOf(mA));
-      const dateB = new Date(parseInt(yB), monthNames.indexOf(mB));
-      return dateB.getTime() - dateA.getTime();
-    }));
   }, [user, monthNames]);
 
   const fetchInvestments = useCallback(async () => {
     if (!user) return;
+
+    const isConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL && 
+                         process.env.NEXT_PUBLIC_SUPABASE_URL !== 'https://placeholder-project.supabase.co';
+    
+    if (!isConfigured) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     
-    // Main query
-    let query = supabase
-      .from('investments')
-      .select('*', { count: 'exact' })
-      .eq('user_id', user.id);
+    try {
+      // Main query
+      let query = supabase
+        .from('investments')
+        .select('*', { count: 'exact' })
+        .eq('user_id', user.id);
 
-    if (selectedMonthYear !== 'Todos') {
-      const [monthName, year] = selectedMonthYear.split(' ');
-      const month = monthNames.indexOf(monthName);
-      if (month !== -1) {
-        const refDate = new Date(parseInt(year), month, 1).toISOString().split('T')[0];
-        query = query.eq('reference_date', refDate);
+      if (selectedMonthYear !== 'Todos') {
+        const [monthName, year] = selectedMonthYear.split(' ');
+        const month = monthNames.indexOf(monthName);
+        if (month !== -1) {
+          const refDate = new Date(parseInt(year), month, 1).toISOString().split('T')[0];
+          query = query.eq('reference_date', refDate);
+        }
       }
-    }
 
-    const { data, count, error } = await query
-      .order('reference_date', { ascending: false })
-      .order('asset_name', { ascending: true })
-      .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
+      const { data, count, error } = await query
+        .order('reference_date', { ascending: false })
+        .order('asset_name', { ascending: true })
+        .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
 
-    if (error) {
-      console.error('Error fetching investments:', error);
-    } else {
-      setInvestments(data || []);
-      setTotalCount(count || 0);
+      if (error) {
+        console.error('Error fetching investments:', error);
+      } else {
+        setInvestments(data || []);
+        setTotalCount(count || 0);
+      }
+    } catch (err: any) {
+      console.error('Erro de conexão ao buscar investimentos:', err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [user, selectedMonthYear, currentPage, pageSize, monthNames]);
 
   useEffect(() => {

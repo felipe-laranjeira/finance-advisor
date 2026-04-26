@@ -44,132 +44,155 @@ export default function Page() {
   const fetchAvailableMonths = useCallback(async () => {
     if (!user) return;
 
-    const { data, error } = await supabase
-      .from('incoming')
-      .select('date')
-      .eq('user_id', user.id)
-      .order('date', { ascending: false });
+    const isConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL && 
+                         process.env.NEXT_PUBLIC_SUPABASE_URL !== 'https://placeholder-project.supabase.co';
+    
+    if (!isConfigured) return;
 
-    if (error) {
-      console.error('Error fetching months:', error);
-      return;
-    }
+    try {
+      const { data, error } = await supabase
+        .from('incoming')
+        .select('date')
+        .eq('user_id', user.id)
+        .order('date', { ascending: false });
 
-    if (data) {
-      const months = new Set<string>();
-      const monthNames = [
-        'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-      ];
+      if (error) {
+        console.error('Error fetching months:', error);
+        return;
+      }
 
-      data.forEach((t: any) => {
-        const date = new Date(t.date);
-        const monthYear = `${monthNames[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
-        months.add(monthYear);
-      });
+      if (data) {
+        const months = new Set<string>();
+        const monthNames = [
+          'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+          'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+        ];
 
-      const monthsArray = Array.from(months);
-      setAvailableMonths(monthsArray);
+        data.forEach((t: any) => {
+          const date = new Date(t.date);
+          const monthYear = `${monthNames[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
+          months.add(monthYear);
+        });
 
-      // Default selection logic: current month if exists, otherwise most recent month
-      if (selectedMonthYear === 'Todos' && monthsArray.length > 0) {
-        const now = new Date();
-        const currentMonthYear = `${monthNames[now.getUTCMonth()]} ${now.getUTCFullYear()}`;
-        
-        if (months.has(currentMonthYear)) {
-          setSelectedMonthYear(currentMonthYear);
-        } else {
-          setSelectedMonthYear(monthsArray[0]);
+        const monthsArray = Array.from(months);
+        setAvailableMonths(monthsArray);
+
+        // Default selection logic: current month if exists, otherwise most recent month
+        if (selectedMonthYear === 'Todos' && monthsArray.length > 0) {
+          const now = new Date();
+          const currentMonthYear = `${monthNames[now.getUTCMonth()]} ${now.getUTCFullYear()}`;
+          
+          if (months.has(currentMonthYear)) {
+            setSelectedMonthYear(currentMonthYear);
+          } else {
+            setSelectedMonthYear(monthsArray[0]);
+          }
         }
       }
+    } catch (err) {
+      console.error('Erro de conexão ao buscar meses:', err);
     }
   }, [user, selectedMonthYear]);
 
   const fetchTransactions = useCallback(async () => {
     if (!user) return;
+
+    const isConfigured = process.env.NEXT_PUBLIC_SUPABASE_URL && 
+                         process.env.NEXT_PUBLIC_SUPABASE_URL !== 'https://placeholder-project.supabase.co';
+    
+    if (!isConfigured) {
+      setLoading(false);
+      return;
+    }
+
     setLoading(true);
     
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-    
-    const startOfCurrent = new Date(currentYear, currentMonth, 1).toISOString().split('T')[0];
-    const endOfCurrent = new Date(currentYear, currentMonth + 1, 0).toISOString().split('T')[0];
-    
-    const startOfPrevious = new Date(currentYear, currentMonth - 1, 1).toISOString().split('T')[0];
-    const endOfPrevious = new Date(currentYear, currentMonth, 0).toISOString().split('T')[0];
+    try {
+      const now = new Date();
+      const currentYear = now.getFullYear();
+      const currentMonth = now.getMonth();
+      
+      const startOfCurrent = new Date(currentYear, currentMonth, 1).toISOString().split('T')[0];
+      const endOfCurrent = new Date(currentYear, currentMonth + 1, 0).toISOString().split('T')[0];
+      
+      const startOfPrevious = new Date(currentYear, currentMonth - 1, 1).toISOString().split('T')[0];
+      const endOfPrevious = new Date(currentYear, currentMonth, 0).toISOString().split('T')[0];
 
-    const [currentRes, previousRes] = await Promise.all([
-      supabase.from('incoming').select('amount').eq('user_id', user.id).gte('date', startOfCurrent).lte('date', endOfCurrent),
-      supabase.from('incoming').select('amount').eq('user_id', user.id).gte('date', startOfPrevious).lte('date', endOfPrevious)
-    ]);
+      const [currentRes, previousRes] = await Promise.all([
+        supabase.from('incoming').select('amount').eq('user_id', user.id).gte('date', startOfCurrent).lte('date', endOfCurrent),
+        supabase.from('incoming').select('amount').eq('user_id', user.id).gte('date', startOfPrevious).lte('date', endOfPrevious)
+      ]);
 
-    const currentTotal = currentRes.data?.reduce((acc, t) => acc + parseFloat(t.amount), 0) || 0;
-    const previousTotal = previousRes.data?.reduce((acc, t) => acc + parseFloat(t.amount), 0) || 0;
-    
-    setComparisonStats({ current: currentTotal, previous: previousTotal });
+      const currentTotal = currentRes.data?.reduce((acc, t) => acc + parseFloat(t.amount), 0) || 0;
+      const previousTotal = previousRes.data?.reduce((acc, t) => acc + parseFloat(t.amount), 0) || 0;
+      
+      setComparisonStats({ current: currentTotal, previous: previousTotal });
 
-    let selectString = `
-      *,
-      incoming_categories (
-        name
-      )
-    `;
-
-    if (selectedCategory !== 'Todas as Categorias') {
-      selectString = `
+      let selectString = `
         *,
-        incoming_categories!inner (
+        incoming_categories (
           name
         )
       `;
-    }
 
-    let query = supabase
-      .from('incoming')
-      .select(selectString, { count: 'exact' })
-      .eq('user_id', user.id);
-
-    if (selectedCategory !== 'Todas as Categorias') {
-      query = query.eq('incoming_categories.name', selectedCategory);
-    }
-
-    if (selectedMonthYear !== 'Todos') {
-      const [monthName, year] = selectedMonthYear.split(' ');
-      const monthMap: { [key: string]: number } = {
-        'Janeiro': 0, 'Fevereiro': 1, 'Março': 2, 'Abril': 3, 'Maio': 4, 'Junho': 5,
-        'Julho': 6, 'Agosto': 7, 'Setembro': 8, 'Outubro': 9, 'Novembro': 10, 'Dezembro': 11
-      };
-      const month = monthMap[monthName];
-      if (month !== undefined) {
-        const startDate = new Date(parseInt(year), month, 1);
-        const endDate = new Date(parseInt(year), month + 1, 0);
-        query = query.gte('date', startDate.toISOString().split('T')[0])
-                     .lte('date', endDate.toISOString().split('T')[0]);
+      if (selectedCategory !== 'Todas as Categorias') {
+        selectString = `
+          *,
+          incoming_categories!inner (
+            name
+          )
+        `;
       }
-    }
 
-    const { data, error, count } = await query
-      .order('date', { ascending: false })
-      .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
+      let query = supabase
+        .from('incoming')
+        .select(selectString, { count: 'exact' })
+        .eq('user_id', user.id);
 
-    if (error) {
-      console.error('Error fetching transactions:', error);
-      alert('Erro ao carregar receitas: ' + error.message);
-    } else {
-      setTotalCount(count || 0);
-      const formatted = data.map((t: any) => ({
-        id: t.id,
-        date: new Date(t.date),
-        description: t.description,
-        subtext: '',
-        category: t.incoming_categories?.name || 'Outros',
-        status: 'Recebido',
-        amount: parseFloat(t.amount),
-      }));
-      setTransactions(formatted);
+      if (selectedCategory !== 'Todas as Categorias') {
+        query = query.eq('incoming_categories.name', selectedCategory);
+      }
+
+      if (selectedMonthYear !== 'Todos') {
+        const [monthName, year] = selectedMonthYear.split(' ');
+        const monthMap: { [key: string]: number } = {
+          'Janeiro': 0, 'Fevereiro': 1, 'Março': 2, 'Abril': 3, 'Maio': 4, 'Junho': 5,
+          'Julho': 6, 'Agosto': 7, 'Setembro': 8, 'Outubro': 9, 'Novembro': 10, 'Dezembro': 11
+        };
+        const month = monthMap[monthName];
+        if (month !== undefined) {
+          const startDate = new Date(parseInt(year), month, 1);
+          const endDate = new Date(parseInt(year), month + 1, 0);
+          query = query.gte('date', startDate.toISOString().split('T')[0])
+                       .lte('date', endDate.toISOString().split('T')[0]);
+        }
+      }
+
+      const { data, error, count } = await query
+        .order('date', { ascending: false })
+        .range((currentPage - 1) * pageSize, currentPage * pageSize - 1);
+
+      if (error) {
+        console.error('Error fetching transactions:', error);
+        // Don't alert here to avoid spam, just console error
+      } else {
+        setTotalCount(count || 0);
+        const formatted = data.map((t: any) => ({
+          id: t.id,
+          date: new Date(t.date),
+          description: t.description,
+          subtext: '',
+          category: t.incoming_categories?.name || 'Outros',
+          status: 'Recebido',
+          amount: parseFloat(t.amount),
+        }));
+        setTransactions(formatted);
+      }
+    } catch (err: any) {
+      console.error('Erro de conexão ao buscar transações:', err);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }, [user, selectedCategory, selectedMonthYear, currentPage, pageSize]);
 
   useEffect(() => {
