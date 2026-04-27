@@ -501,7 +501,7 @@ export default function Page() {
     <div className="flex min-h-screen">
       <Sidebar />
       
-      <main className="flex-1 lg:ml-64 bg-surface min-h-screen pb-20">
+      <main className="flex-1 md:ml-80 bg-surface min-h-screen pb-20">
         <TopBar />
         
         {!isSupabaseConfigured && (

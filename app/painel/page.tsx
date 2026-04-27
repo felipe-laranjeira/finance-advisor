@@ -375,7 +375,7 @@ export default function DashboardPage() {
     return (
       <div className="flex h-screen bg-surface">
         <Sidebar />
-        <main className="flex-1 ml-64 flex items-center justify-center">
+        <main className="flex-1 md:ml-80 flex items-center justify-center">
           <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
         </main>
       </div>
@@ -385,7 +385,7 @@ export default function DashboardPage() {
   return (
     <div className="flex min-h-screen bg-surface font-body text-on-surface">
       <Sidebar />
-      <main className="flex-1 lg:ml-64 flex flex-col">
+      <main className="flex-1 md:ml-80 flex flex-col">
         <TopBar />
         
         {!isSupabaseConfigured && (

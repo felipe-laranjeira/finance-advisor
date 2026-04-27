@@ -35,7 +35,7 @@ export function Sidebar() {
   };
 
   return (
-    <aside className="h-screen w-64 fixed left-0 top-0 hidden lg:flex flex-col bg-surface-container-low border-r border-outline-variant/10 z-50">
+    <aside className="fixed top-4 left-4 bottom-4 w-72 hidden md:flex flex-col bg-surface-container-high rounded-3xl shadow-2xl border border-outline-variant/10 z-50">
       <div className="flex flex-col h-full py-8 px-4">
           {/* Brand Section */}
           <div className="mb-10 px-4 flex justify-between items-center">
