@@ -5,6 +5,7 @@ import { Sidebar } from '@/components/Sidebar';
 import { TopBar } from '@/components/TopBar';
 import { useAuth } from '@/components/AuthProvider';
 import { supabase } from '@/lib/supabase';
+import { useLayout } from '@/components/LayoutProvider';
 import { 
   BarChart, 
   Bar, 
@@ -42,6 +43,7 @@ const months = [
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { isSidebarOpen } = useLayout();
   const [isMobile, setIsMobile] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -366,7 +368,10 @@ export default function DashboardPage() {
     return (
       <div className="flex h-screen bg-surface">
         <Sidebar />
-        <main className="flex-1 md:ml-80 flex items-center justify-center">
+        <main className={cn(
+          "flex-1 flex items-center justify-center transition-all duration-300",
+          isSidebarOpen ? "md:ml-80" : "md:ml-0"
+        )}>
           <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin"></div>
         </main>
       </div>
@@ -376,7 +381,10 @@ export default function DashboardPage() {
   return (
     <div className="flex min-h-screen bg-surface font-body text-on-surface">
       <Sidebar />
-      <main className="flex-1 md:ml-80 flex flex-col">
+      <main className={cn(
+        "flex-1 flex flex-col transition-all duration-300",
+        isSidebarOpen ? "md:ml-80" : "md:ml-0"
+      )}>
         <TopBar />
         
         {!isSupabaseConfigured && (

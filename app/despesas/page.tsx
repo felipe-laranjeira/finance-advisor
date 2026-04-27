@@ -24,9 +24,11 @@ interface Transaction {
 }
 
 import { useAuth } from '@/components/AuthProvider';
+import { useLayout } from '@/components/LayoutProvider';
 
 export default function Page() {
   const { user, loading: authLoading } = useAuth();
+  const { isSidebarOpen } = useLayout();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
@@ -719,7 +721,10 @@ Responda de forma direta, profissional e empática, em português do Brasil. Use
     <div className="flex min-h-screen">
       <Sidebar />
       
-      <main className="flex-1 md:ml-80 bg-surface min-h-screen pb-20">
+      <main className={cn(
+        "flex-1 bg-surface min-h-screen pb-20 transition-all duration-300",
+        isSidebarOpen ? "md:ml-80" : "md:ml-0"
+      )}>
         <TopBar />
         
         {!isSupabaseConfigured && (

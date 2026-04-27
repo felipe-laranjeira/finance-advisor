@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Search, Bell, Wallet, User as UserIcon, LogOut, ShieldCheck, UserCog, UserCircle } from 'lucide-react';
+import { User as UserIcon, LogOut, ShieldCheck, UserCog } from 'lucide-react';
 import Image from 'next/image';
 import { useAuth } from '@/components/AuthProvider';
 import { motion, AnimatePresence } from 'motion/react';
@@ -133,31 +133,12 @@ export function TopBar() {
               {user?.name && user.name.trim() !== "" ? user.name : 'Bem-vindo'}
             </p>
           </div>
-
-          <div className="relative group hidden sm:block">
-            <span className="absolute inset-y-0 left-4 flex items-center text-on-surface-variant">
-              <Search size={18} />
-            </span>
-            <input 
-              className="pl-12 pr-6 py-2.5 bg-surface-container-highest border-none rounded-full text-sm focus:ring-2 focus:ring-primary/20 sm:w-64 md:w-80 transition-all placeholder:text-on-surface-variant/60" 
-              placeholder="Pesquisar..." 
-              type="text"
-            />
-          </div>
         </div>
         
         <div className="flex items-center gap-2 md:gap-5">
           <div className="hidden lg:block mr-2 text-right">
             <p className="text-sm font-bold text-on-surface leading-tight">{user?.name || 'Usuário'}</p>
           </div>
-          
-          <button className="p-2 md:p-2.5 rounded-full hover:bg-surface-container-highest transition-colors relative text-on-surface-variant">
-            <Bell size={20} />
-            <span className="absolute top-2 md:top-2.5 right-2 md:right-2.5 w-2 h-2 bg-tertiary rounded-full border-2 border-white"></span>
-          </button>
-          <button className="p-2 md:p-2.5 rounded-full hover:bg-surface-container-highest transition-colors text-on-surface-variant">
-            <Wallet size={20} />
-          </button>
           
           <div className="relative" ref={dropdownRef}>
             <div 

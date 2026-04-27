@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthProvider';
+import { useLayout } from '@/components/LayoutProvider';
 import { cn, formatCurrency } from '@/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -31,6 +32,7 @@ interface Budget {
 
 export default function BudgetPage() {
   const { user, loading: authLoading } = useAuth();
+  const { isSidebarOpen } = useLayout();
   const [categories, setCategories] = useState<Category[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [loading, setLoading] = useState(true);
@@ -200,7 +202,10 @@ export default function BudgetPage() {
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <main className="flex-1 md:ml-80 bg-surface min-h-screen pb-20">
+      <main className={cn(
+        "flex-1 bg-surface min-h-screen pb-20 transition-all duration-300",
+        isSidebarOpen ? "md:ml-80" : "md:ml-0"
+      )}>
         <TopBar />
         
         <div className="p-4 md:p-12 max-w-7xl mx-auto">

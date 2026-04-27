@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { GoogleGenAI, Type } from "@google/genai";
 import { cn, formatCurrency } from '@/lib/utils';
 import { useAuth } from '@/components/AuthProvider';
+import { useLayout } from '@/components/LayoutProvider';
 
 interface Investment {
   id: string;
@@ -24,6 +25,7 @@ interface Investment {
 
 export default function InvestmentsPage() {
   const { user, loading: authLoading } = useAuth();
+  const { isSidebarOpen } = useLayout();
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState<Investment | null>(null);
@@ -290,7 +292,10 @@ export default function InvestmentsPage() {
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <main className="flex-1 md:ml-80 bg-surface min-h-screen pb-20">
+      <main className={cn(
+        "flex-1 bg-surface min-h-screen pb-20 transition-all duration-300",
+        isSidebarOpen ? "md:ml-80" : "md:ml-0"
+      )}>
         <TopBar />
         
         <div className="p-4 md:p-12 max-w-7xl mx-auto">
