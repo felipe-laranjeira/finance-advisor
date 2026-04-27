@@ -42,12 +42,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   useEffect(() => {
     const checkUser = async () => {
       try {
+        setLoading(true);
+        // Check if Supabase already has a session (it persists by itself if configured)
+        const { data: { session: existingSession } } = await supabase.auth.getSession();
+        
         const storedUser = localStorage.getItem('app_user');
         if (storedUser) {
           const parsedUser = JSON.parse(storedUser);
 
-          // Restore Supabase session if it exists in stored user data
-          if (parsedUser.session) {
+          // If Supabase doesn't have a session but we have one in localStorage, try to restore it
+          if (!existingSession && parsedUser.session) {
             try {
               const { error: sessionError } = await supabase.auth.setSession({
                 access_token: parsedUser.session.access_token,
@@ -56,10 +60,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               
               if (sessionError) {
                 console.warn('Failed to restore Supabase session:', sessionError.message);
-                if (sessionError.message.includes('Refresh Token Not Found') || sessionError.message.includes('invalid_grant')) {
+                // Clear state on common authentication failures
+                if (
+                  sessionError.message.includes('Refresh Token Not Found') || 
+                  sessionError.message.includes('invalid_grant') ||
+                  sessionError.message.includes('Refresh token has expired')
+                ) {
                   localStorage.removeItem('app_user');
                   setUser(null);
-                  setLoading(false);
                   if (pathname !== '/' && pathname !== '/registrar') {
                     router.push('/');
                   }
@@ -71,8 +79,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             }
           }
           
-          // Verify user status in DB using standard client
-          // If RLS is enabled, this will only work if we have a valid session
+          // Obtain current session (after potential restore)
+          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          
+          if (!currentSession) {
+             // No valid Supabase session, clear local user state too if they were supposed to be logged in
+             localStorage.removeItem('app_user');
+             setUser(null);
+             if (pathname !== '/' && pathname !== '/registrar') {
+               router.push('/');
+             }
+             return;
+          }
+
+          // Verify user status in DB
           const { data, error } = await supabase
             .from('users')
             .select('*')
@@ -81,9 +101,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
           if (error) {
             console.error('Erro ao verificar usuário no banco:', error.message);
-            // If it's a permission error (PGRST301), it means session expired but user is in localstorage
-            if (error.code === 'PGRST301' || error.message.includes('permission denied')) {
-               console.warn('RLS bloqueou acesso. Redirecionando para login.');
+            // If it's a permission error (PGRST301), it means session expired or token invalid
+            if (error.code === 'PGRST301' || error.message.includes('permission denied') || error.message.includes('JWT expired')) {
+               console.warn('Sessão expirada ou acesso negado. Redirecionando para login.');
+               await supabase.auth.signOut();
             }
             
             localStorage.removeItem('app_user');
@@ -91,14 +112,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             if (pathname !== '/' && pathname !== '/registrar') {
               router.push('/');
             }
-            setLoading(false);
             return;
           }
 
           if (data && data.status === 'Active') {
             setUser(data);
           } else {
-            console.warn('Sessão inválida ou usuário inativo.');
+            console.warn('Usuário inativo ou não encontrado.');
+            await supabase.auth.signOut();
             localStorage.removeItem('app_user');
             setUser(null);
             if (pathname !== '/' && pathname !== '/registrar') {
@@ -106,10 +127,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             }
           }
         } else {
+          // No stored user, ensure Supabase is also signed out
+          if (existingSession) {
+            await supabase.auth.signOut();
+          }
           setUser(null);
-          if (pathname !== '/' && pathname !== '/registrar' && !['/painel', '/receitas', '/despesas', '/investimentos', '/orcamento'].some(path => pathname.startsWith(path))) {
-            // Keep current logic
-          } else if (['/painel', '/receitas', '/despesas', '/investimentos', '/orcamento'].some(path => pathname.startsWith(path))) {
+          // Redirect if on a protected route
+          const protectedRoutes = ['/painel', '/receitas', '/despesas', '/investimentos', '/orcamento'];
+          if (protectedRoutes.some(path => pathname.startsWith(path))) {
             router.push('/');
           }
         }
@@ -121,6 +146,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     checkUser();
+    
+    // Listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+        if (!session) {
+          localStorage.removeItem('app_user');
+          setUser(null);
+          if (pathname !== '/' && pathname !== '/registrar') {
+            router.push('/');
+          }
+        }
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
   }, [router, pathname]);
 
   const login = async (userData: AppUser) => {
