@@ -100,7 +100,7 @@ export function TransactionTable({ transactions, onDelete, onEdit }: Transaction
       </div>
 
       {/* Desktop Table View */}
-      <div className="hidden md:block overflow-x-auto">
+      <div className="hidden md:block overflow-x-auto pb-16">
         <table className="w-full text-left border-collapse min-w-[600px]">
           <thead>
             <tr className="bg-surface-container-low/40">

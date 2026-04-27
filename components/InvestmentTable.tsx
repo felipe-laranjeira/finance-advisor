@@ -92,7 +92,7 @@ export function InvestmentTable({ investments, onDelete, onEdit }: InvestmentTab
       </div>
 
       {/* Desktop Table View */}
-      <div className="hidden md:block overflow-x-auto">
+      <div className="hidden md:block overflow-x-auto pb-16">
         <table className="w-full text-left border-collapse">
           <thead>
             <tr className="border-b border-outline-variant/5">
