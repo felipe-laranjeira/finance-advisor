@@ -27,10 +27,6 @@ export function LayoutProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('sidebar_open', String(newState));
   };
 
-  if (!mounted) {
-    return <>{children}</>;
-  }
-
   return (
     <LayoutContext.Provider value={{ isSidebarOpen, toggleSidebar }}>
       {children}
