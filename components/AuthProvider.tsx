@@ -43,8 +43,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const checkUser = async () => {
       try {
         setLoading(true);
-        // Check if Supabase already has a session (it persists by itself if configured)
-        const { data: { session: existingSession } } = await supabase.auth.getSession();
+        
+        // Initial session check
+        let existingSession = null;
+        try {
+          const { data, error: initialError } = await supabase.auth.getSession();
+          if (initialError) {
+            console.warn('Supabase getSession error:', initialError.message);
+            // If tokens are broken, sign out to clear them
+            if (initialError.message.includes('Refresh Token Not Found') || initialError.message.includes('refresh_token_not_found')) {
+               await supabase.auth.signOut();
+            }
+          }
+          existingSession = data.session;
+        } catch (sessErr) {
+          console.error('Failed to get initial session:', sessErr);
+        }
         
         const storedUser = localStorage.getItem('app_user');
         if (storedUser) {
@@ -63,11 +77,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
                 // Clear state on common authentication failures
                 if (
                   sessionError.message.includes('Refresh Token Not Found') || 
+                  sessionError.message.includes('refresh_token_not_found') ||
                   sessionError.message.includes('invalid_grant') ||
                   sessionError.message.includes('Refresh token has expired')
                 ) {
                   localStorage.removeItem('app_user');
                   setUser(null);
+                  await supabase.auth.signOut();
                   if (pathname !== '/' && pathname !== '/registrar') {
                     router.push('/');
                   }
@@ -79,13 +95,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             }
           }
           
-          // Obtain current session (after potential restore)
-          const { data: { session: currentSession } } = await supabase.auth.getSession();
+          // Re-verify current session
+          const { data: { session: currentSession }, error: sessionCheckError } = await supabase.auth.getSession();
           
-          if (!currentSession) {
-             // No valid Supabase session, clear local user state too if they were supposed to be logged in
+          if (sessionCheckError || !currentSession) {
+             console.warn('No active session after restore attempt');
              localStorage.removeItem('app_user');
              setUser(null);
+             await supabase.auth.signOut();
              if (pathname !== '/' && pathname !== '/registrar') {
                router.push('/');
              }
@@ -101,9 +118,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
           if (error) {
             console.error('Erro ao verificar usuário no banco:', error.message);
-            // If it's a permission error (PGRST301), it means session expired or token invalid
+            // If session expired or token invalid
             if (error.code === 'PGRST301' || error.message.includes('permission denied') || error.message.includes('JWT expired')) {
-               console.warn('Sessão expirada ou acesso negado. Redirecionando para login.');
+               console.warn('Sessão expirada ou acesso negado.');
                await supabase.auth.signOut();
             }
             
@@ -167,17 +184,21 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const login = async (userData: AppUser) => {
     // If a Supabase session was provided, set it in the client
-    if (userData.session) {
+    if (userData.session && userData.session.access_token && userData.session.refresh_token) {
       const { session } = userData;
-      const { error } = await supabase.auth.setSession({
-        access_token: session.access_token,
-        refresh_token: session.refresh_token
-      });
-      
-      if (error) {
-        console.error('Erro ao estabelecer sessão no Supabase:', error.message);
-      } else {
-        console.info('Sessão Supabase sincronizada com sucesso.');
+      try {
+        const { error } = await supabase.auth.setSession({
+          access_token: session.access_token,
+          refresh_token: session.refresh_token
+        });
+        
+        if (error) {
+          console.error('Erro ao estabelecer sessão no Supabase:', error.message);
+        } else {
+          console.info('Sessão Supabase sincronizada com sucesso.');
+        }
+      } catch (err) {
+        console.error('Critical error in setSession during login:', err);
       }
     }
 

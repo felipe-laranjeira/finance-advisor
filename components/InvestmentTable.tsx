@@ -137,7 +137,7 @@ export function InvestmentTable({ investments, onDelete, onEdit }: InvestmentTab
                   </p>
                 </td>
                 <td className="px-8 py-6 text-right">
-                  <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex items-center justify-end gap-2 transition-opacity">
                     <button 
                       onClick={() => onEdit(investment)}
                       className="w-11 h-11 flex items-center justify-center rounded-xl hover:bg-primary/10 text-primary transition-colors"

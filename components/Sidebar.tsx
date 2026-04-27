@@ -7,9 +7,7 @@ import {
   Receipt, 
   BarChart3, 
   Target,
-  Settings, 
   Plus, 
-  HelpCircle, 
   LogOut 
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -23,9 +21,8 @@ const menuItems = [
   { icon: LayoutDashboard, label: 'Painel', href: '/painel', active: false },
   { icon: ArrowDownCircle, label: 'Receitas', href: '/receitas', active: false },
   { icon: Receipt, label: 'Despesas', href: '/despesas', active: false },
-  { icon: Target, label: 'Orçamento', href: '/orcamento', active: false },
   { icon: BarChart3, label: 'Investimentos', href: '/investimentos', active: false },
-  { icon: Settings, label: 'Configurações', href: '#', active: false },
+  { icon: Target, label: 'Orçamento', href: '/orcamento', active: false },
 ];
 
 export function Sidebar() {
@@ -74,10 +71,6 @@ export function Sidebar() {
 
           {/* Footer Links */}
           <div className="pt-6 border-t border-outline-variant/20 space-y-1">
-            <a className="text-on-surface-variant flex items-center gap-3 px-4 py-2.5 hover:bg-surface-container-highest transition-all duration-200 rounded-xl text-sm" href="#">
-              <HelpCircle size={18} />
-              <span>Central de Ajuda</span>
-            </a>
             <button 
               onClick={handleLogout}
               className="w-full text-on-surface-variant flex items-center gap-3 px-4 py-2.5 hover:bg-surface-container-highest transition-all duration-200 rounded-xl text-sm"

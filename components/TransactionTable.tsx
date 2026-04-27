@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { MoreVertical, Trash2, Edit2 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
@@ -23,8 +23,6 @@ interface TransactionTableProps {
 }
 
 export function TransactionTable({ transactions, onDelete, onEdit }: TransactionTableProps) {
-  const [activeMenu, setActiveMenu] = useState<string | null>(null);
-
   return (
     <div className="bg-transparent md:bg-surface-container-lowest md:rounded-[2.5rem] md:overflow-hidden md:border md:border-outline-variant/10 md:shadow-sm">
       {/* Mobile Card Stacking View */}
@@ -108,7 +106,7 @@ export function TransactionTable({ transactions, onDelete, onEdit }: Transaction
               <th className="px-6 md:px-10 py-4 md:py-6 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70">Descrição</th>
               <th className="px-6 md:px-10 py-4 md:py-6 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70">Categoria</th>
               <th className="px-6 md:px-10 py-4 md:py-6 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70 text-right">Valor</th>
-              <th className="px-6 md:px-10 py-4 md:py-6 w-16"></th>
+              <th className="px-6 md:px-10 py-4 md:py-6 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70 text-right">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-outline-variant/5">
@@ -143,56 +141,29 @@ export function TransactionTable({ transactions, onDelete, onEdit }: Transaction
                   )}>
                     {formatCurrency(t.amount)}
                   </td>
-                  <td className="px-6 md:px-10 py-4 md:py-6 text-right relative">
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setActiveMenu(activeMenu === t.id ? null : t.id);
-                      }}
-                      className="text-on-surface-variant hover:text-primary transition-colors p-2 rounded-full hover:bg-surface-container-high w-11 h-11 flex items-center justify-center"
-                    >
-                      <MoreVertical className="w-[18px] h-[18px] md:w-[20px] md:h-[20px]" />
-                    </button>
-
-                    <AnimatePresence>
-                      {activeMenu === t.id && (
-                        <>
-                          <div 
-                            className="fixed inset-0 z-10" 
-                            onClick={() => setActiveMenu(null)}
-                          />
-                          <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: -10 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: -10 }}
-                            className="absolute right-10 top-16 bg-surface-container-lowest border border-outline-variant/20 rounded-2xl shadow-xl z-20 py-2 min-w-[140px]"
-                          >
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onEdit(t);
-                                setActiveMenu(null);
-                              }}
-                              className="w-full px-4 py-3 text-left text-sm font-bold text-on-surface-variant hover:bg-surface-container-low flex items-center gap-2 transition-colors"
-                            >
-                              <Edit2 size={16} />
-                              Editar
-                            </button>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                onDelete(t.id);
-                                setActiveMenu(null);
-                              }}
-                              className="w-full px-4 py-3 text-left text-sm font-bold text-tertiary hover:bg-tertiary/5 flex items-center gap-2 transition-colors"
-                            >
-                              <Trash2 size={16} />
-                              Excluir
-                            </button>
-                          </motion.div>
-                        </>
-                      )}
-                    </AnimatePresence>
+                  <td className="px-6 md:px-10 py-4 md:py-6 text-right">
+                    <div className="flex items-center justify-end gap-2 transition-opacity">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onEdit(t);
+                        }}
+                        className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-container-low md:bg-transparent text-primary hover:bg-primary/10 transition-colors"
+                        title="Editar"
+                      >
+                        <Edit2 size={18} />
+                      </button>
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDelete(t.id);
+                        }}
+                        className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-container-low md:bg-transparent text-tertiary hover:bg-tertiary/10 transition-colors"
+                        title="Excluir"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
                   </td>
                 </motion.tr>
               ))}
