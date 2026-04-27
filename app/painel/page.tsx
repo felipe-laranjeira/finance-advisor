@@ -22,6 +22,8 @@ import {
   Legend
 } from 'recharts';
 import { motion } from 'motion/react';
+import { MaskedValue } from '@/components/MaskedValue';
+import { useMask } from '@/components/MaskProvider';
 import { 
   TrendingUp, 
   TrendingDown, 
@@ -44,6 +46,7 @@ const months = [
 export default function DashboardPage() {
   const { user } = useAuth();
   const { isSidebarOpen } = useLayout();
+  const { isMasked } = useMask();
   const [isMobile, setIsMobile] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
@@ -495,7 +498,7 @@ export default function DashboardPage() {
                     <span className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Receitas</span>
                   </div>
                   <h2 className="text-2xl font-black font-headline text-on-surface">
-                    {formatCurrency(stats.totalIncome)}
+                    <MaskedValue value={stats.totalIncome} />
                   </h2>
                 </div>
                 <div className="h-16 w-32 mb-1">
@@ -530,7 +533,7 @@ export default function DashboardPage() {
                     <span className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant">Consumo</span>
                   </div>
                   <h2 className="text-2xl font-black font-headline text-on-surface">
-                    {formatCurrency(stats.totalConsumptionExpense)}
+                    <MaskedValue value={stats.totalConsumptionExpense} />
                   </h2>
                 </div>
                 <div className="h-16 w-32 mb-1">
@@ -568,7 +571,7 @@ export default function DashboardPage() {
                     <span className="text-[10px] font-black uppercase tracking-widest opacity-80">Saldo Livre</span>
                   </div>
                   <h2 className="text-2xl font-black font-headline">
-                    {formatCurrency(stats.balance)}
+                    <MaskedValue value={stats.balance} />
                   </h2>
                 </div>
                 <div className="h-16 w-32 mb-1">
@@ -606,7 +609,7 @@ export default function DashboardPage() {
                     {stats.investmentRate.toFixed(1)}%
                   </h2>
                   <p className="text-[10px] font-medium opacity-90 truncate">
-                    Investiu {formatCurrency(stats.totalInvested)}
+                    Investiu <MaskedValue value={stats.totalInvested} />
                   </p>
                 </div>
                 <div className="h-16 w-32 mb-1">
@@ -652,12 +655,12 @@ export default function DashboardPage() {
                       axisLine={false} 
                       tickLine={false} 
                       tick={{ fill: '#434652', fontSize: 10, fontWeight: 700 }}
-                      tickFormatter={(value) => formatCurrency(value)}
+                      tickFormatter={(value) => isMasked ? '••••' : formatCurrency(value)}
                     />
                     <Tooltip 
                       cursor={{ fill: '#f2f4f7' }}
                       contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                      formatter={(value: any) => formatCurrency(Number(value))}
+                      formatter={(value: any) => isMasked ? '••••' : formatCurrency(Number(value))}
                     />
                     <Legend verticalAlign="top" align="right" iconType="circle" wrapperStyle={{ paddingBottom: '20px' }} />
                     <Bar dataKey="income" name="Entradas" fill="#006b5f" radius={[6, 6, 0, 0]} barSize={12} />
@@ -689,12 +692,12 @@ export default function DashboardPage() {
                       axisLine={false} 
                       tickLine={false} 
                       tick={{ fill: '#434652', fontSize: 10, fontWeight: 700 }}
-                      tickFormatter={(value) => formatCurrency(value)}
+                      tickFormatter={(value) => isMasked ? '••••' : formatCurrency(value)}
                     />
                     <Tooltip 
                       cursor={{ fill: '#f2f4f7' }}
                       contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                      formatter={(value: any) => formatCurrency(Number(value))}
+                      formatter={(value: any) => isMasked ? '••••' : formatCurrency(Number(value))}
                     />
                     <Bar dataKey="balance" name="Patrimônio" fill="#003178" radius={[6, 6, 0, 0]} barSize={24} />
                   </BarChart>
@@ -727,7 +730,7 @@ export default function DashboardPage() {
                       </Pie>
                       <Tooltip 
                         contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                        formatter={(value: any) => formatCurrency(Number(value))}
+                        formatter={(value: any) => isMasked ? '••••' : formatCurrency(Number(value))}
                       />
                     </PieChart>
                   </ResponsiveContainer>
@@ -740,7 +743,7 @@ export default function DashboardPage() {
                         <span className="text-sm font-bold text-on-surface truncate">{entry.name}</span>
                       </div>
                       <div className="flex items-center justify-between ml-6">
-                        <span className="text-xs font-black text-primary font-headline">{formatCurrency(entry.value)}</span>
+                        <span className="text-xs font-black text-primary font-headline"><MaskedValue value={entry.value} /></span>
                         <span className="text-[10px] font-black text-on-surface-variant/40 bg-surface-container-high px-2 py-0.5 rounded-full">
                           {stats.totalExpense > 0 ? ((entry.value / stats.totalExpense) * 100).toFixed(0) : 0}%
                         </span>
@@ -781,7 +784,7 @@ export default function DashboardPage() {
                       </Pie>
                       <Tooltip 
                         contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                        formatter={(value: any) => formatCurrency(Number(value))}
+                        formatter={(value: any) => isMasked ? '••••' : formatCurrency(Number(value))}
                       />
                     </PieChart>
                   </ResponsiveContainer>
@@ -794,7 +797,7 @@ export default function DashboardPage() {
                         <span className="text-sm font-bold text-on-surface truncate">{entry.name}</span>
                       </div>
                       <div className="flex items-center justify-between ml-6">
-                        <span className="text-xs font-black text-secondary font-headline">{formatCurrency(entry.value)}</span>
+                        <span className="text-xs font-black text-secondary font-headline"><MaskedValue value={entry.value} /></span>
                         <span className="text-[10px] font-black text-on-surface-variant/40 bg-surface-container-high px-2 py-0.5 rounded-full">
                           {stats.totalEquity > 0 ? ((entry.value / stats.totalEquity) * 100).toFixed(0) : 0}%
                         </span>
@@ -846,7 +849,7 @@ export default function DashboardPage() {
                     <Tooltip 
                       cursor={{ fill: '#f2f4f7' }}
                       contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                      formatter={(value: any, name: any) => [formatCurrency(Number(value)), name]}
+                      formatter={(value: any, name: any) => [isMasked ? '••••' : formatCurrency(Number(value)), name]}
                     />
                     <Legend 
                       verticalAlign="top" 
@@ -934,7 +937,7 @@ export default function DashboardPage() {
                     <Tooltip 
                       cursor={{ fill: '#f2f4f7' }}
                       contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                      formatter={(value: any, name: any) => [formatCurrency(Number(value)), name === 'spent' ? 'Gasto' : 'Limite']}
+                      formatter={(value: any, name: any) => [isMasked ? '••••' : formatCurrency(Number(value)), name === 'spent' ? 'Gasto' : 'Limite']}
                     />
                     <Bar dataKey="limit" name="Limite" fill="#e0e3e6" radius={[0, 4, 4, 0]} barSize={20} />
                     <Bar dataKey="spent" name="Gasto" radius={[0, 4, 4, 0]} barSize={20}>

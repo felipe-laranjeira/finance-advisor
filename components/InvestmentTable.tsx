@@ -4,6 +4,7 @@ import React from 'react';
 import { MoreVertical, Edit2, Trash2, Landmark, TrendingUp } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { cn } from '@/lib/utils';
+import { MaskedValue } from '@/components/MaskedValue';
 
 interface Investment {
   id: string;
@@ -48,7 +49,7 @@ export function InvestmentTable({ investments, onDelete, onEdit }: InvestmentTab
               </div>
               <div className="text-right">
                 <div className="text-lg font-black text-primary font-headline leading-tight">
-                  {formatCurrency(investment.balance)}
+                  <MaskedValue value={investment.balance} />
                 </div>
                 <div className="mt-1 flex justify-end">
                   <span className={cn(
@@ -133,7 +134,7 @@ export function InvestmentTable({ investments, onDelete, onEdit }: InvestmentTab
                 </td>
                 <td className="px-8 py-6 text-right">
                   <p className="text-lg font-black text-on-surface font-headline">
-                    {formatCurrency(investment.balance)}
+                    <MaskedValue value={investment.balance} />
                   </p>
                 </td>
                 <td className="px-8 py-6 text-right">

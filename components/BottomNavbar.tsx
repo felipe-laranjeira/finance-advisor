@@ -8,9 +8,12 @@ import {
   ArrowDownCircle, 
   Receipt, 
   TrendingUp,
-  Target
+  Target,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useMask } from '@/components/MaskProvider';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Painel', href: '/painel' },

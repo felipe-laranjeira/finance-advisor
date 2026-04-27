@@ -19,6 +19,7 @@ export const metadata: Metadata = {
 
 import { AuthProvider } from '@/components/AuthProvider';
 import { LayoutProvider } from '@/components/LayoutProvider';
+import { MaskProvider } from '@/components/MaskProvider';
 import { BottomNavbar } from '@/components/BottomNavbar';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -30,8 +31,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body suppressHydrationWarning className="bg-[#f7f9fc] text-[#191c1e] antialiased pb-20 lg:pb-0">
         <AuthProvider>
           <LayoutProvider>
-            {children}
-            <BottomNavbar />
+            <MaskProvider>
+              {children}
+              <BottomNavbar />
+            </MaskProvider>
           </LayoutProvider>
         </AuthProvider>
       </body>

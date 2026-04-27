@@ -5,6 +5,7 @@ import { MoreVertical, Trash2, Edit2 } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { MaskedValue } from '@/components/MaskedValue';
 
 interface Transaction {
   id: string;
@@ -57,7 +58,7 @@ export function TransactionTable({ transactions, onDelete, onEdit }: Transaction
                     "font-headline font-black text-xl",
                     t.amount < 0 ? "text-tertiary" : "text-primary"
                   )}>
-                    {formatCurrency(t.amount)}
+                    <MaskedValue value={t.amount} />
                   </div>
                   <span className={cn(
                     "px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider",
@@ -139,7 +140,7 @@ export function TransactionTable({ transactions, onDelete, onEdit }: Transaction
                     "px-6 md:px-10 py-4 md:py-6 text-right font-headline font-black text-base md:text-lg whitespace-nowrap",
                     t.amount < 0 ? "text-tertiary" : "text-primary"
                   )}>
-                    {formatCurrency(t.amount)}
+                    <MaskedValue value={t.amount} />
                   </td>
                   <td className="px-6 md:px-10 py-4 md:py-6 text-right">
                     <div className="flex items-center justify-end gap-2 transition-opacity">

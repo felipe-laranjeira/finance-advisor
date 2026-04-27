@@ -4,6 +4,7 @@ import React from 'react';
 import { TrendingUp, PieChart } from 'lucide-react';
 import { formatCurrency } from '@/lib/utils';
 import { motion } from 'motion/react';
+import { MaskedValue } from '@/components/MaskedValue';
 
 interface InvestmentStatsProps {
   total: number;
@@ -27,7 +28,7 @@ export function InvestmentStats({ total, categoryTotals }: InvestmentStatsProps)
             <TrendingUp size={24} className="opacity-60" />
           </div>
           <p className="text-5xl font-extrabold font-headline mb-6 tracking-tight">
-            {formatCurrency(total)}
+            <MaskedValue value={total} />
           </p>
           <div className="flex items-center gap-2 text-sm">
             <span className="bg-white/20 px-3 py-1 rounded-full font-semibold backdrop-blur-sm">
@@ -57,7 +58,7 @@ export function InvestmentStats({ total, categoryTotals }: InvestmentStatsProps)
                 <div key={category} className="flex flex-col">
                   <span className="text-[10px] font-black uppercase tracking-wider text-primary/60 mb-0.5">{category}</span>
                   <span className="text-lg font-black text-primary font-headline leading-none">
-                    {formatCurrency(amount)}
+                    <MaskedValue value={amount} />
                   </span>
                 </div>
               ))

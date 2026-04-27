@@ -4,6 +4,7 @@ import React from 'react';
 import { TrendingDown } from 'lucide-react';
 import { formatCurrency, cn } from '@/lib/utils';
 import { motion } from 'motion/react';
+import { MaskedValue } from '@/components/MaskedValue';
 
 interface StatsProps {
   total: number;
@@ -61,7 +62,7 @@ export function Stats({
             <TrendingDown size={24} className="opacity-60" />
           </div>
           <p className="text-5xl font-extrabold font-headline mb-6 tracking-tight">
-            {formatCurrency(total)}
+            <MaskedValue value={total} />
           </p>
           <div className="flex items-center gap-2 text-sm">
             <span className="bg-white/20 px-3 py-1 rounded-full font-semibold backdrop-blur-sm">
@@ -89,10 +90,10 @@ export function Stats({
           </div>
           <div className="flex items-baseline gap-3 mb-6">
             <p className="text-5xl font-extrabold font-headline tracking-tight">
-              {formatCurrency(currentMonthTotal)}
+              <MaskedValue value={currentMonthTotal} />
             </p>
             <p className="text-xl font-bold opacity-90">
-              ({isHigher ? '+' : '-'}{formatCurrency(Math.abs(diff))})
+              ({isHigher ? '+' : '-'}<MaskedValue value={Math.abs(diff)} />)
             </p>
           </div>
           <div className="flex flex-col gap-2">
@@ -102,7 +103,7 @@ export function Stats({
               </span>
             </div>
             <p className="text-xs opacity-70 font-medium">
-              {isHigher ? '+' : '-'}{percentDiff.toFixed(1)}% em relação a {formatCurrency(previousMonthTotal)}
+              {isHigher ? '+' : '-'}{percentDiff.toFixed(1)}% em relação a <MaskedValue value={previousMonthTotal} />
             </p>
           </div>
         </div>

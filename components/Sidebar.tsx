@@ -10,7 +10,9 @@ import {
   Plus, 
   LogOut,
   ChevronLeft,
-  Menu
+  Menu,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -18,6 +20,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuth } from '@/components/AuthProvider';
 import { useLayout } from '@/components/LayoutProvider';
+import { useMask } from '@/components/MaskProvider';
 import Link from 'next/link';
 
 const menuItems = [
@@ -33,6 +36,7 @@ export function Sidebar() {
   const pathname = usePathname();
   const { signOut } = useAuth();
   const { isSidebarOpen, toggleSidebar } = useLayout();
+  const { isMasked, toggleMask } = useMask();
 
   const handleLogout = async () => {
     await signOut();
@@ -102,7 +106,20 @@ export function Sidebar() {
                 </nav>
 
                 {/* Footer Links */}
-                <div className="pt-6 border-t border-outline-variant/20 space-y-1">
+                <div className="pt-6 border-t border-outline-variant/20 space-y-2">
+                  <button 
+                    onClick={toggleMask}
+                    className={cn(
+                      "w-full flex items-center gap-3 px-4 py-2.5 transition-all duration-200 rounded-xl text-sm font-medium",
+                      isMasked 
+                        ? "bg-secondary/10 text-secondary border border-secondary/20 shadow-inner" 
+                        : "text-on-surface-variant hover:bg-surface-container-highest"
+                    )}
+                  >
+                    {isMasked ? <EyeOff size={18} /> : <Eye size={18} />}
+                    <span>{isMasked ? "Mostrar Valores" : "Modo Privacidade"}</span>
+                  </button>
+
                   <button 
                     onClick={handleLogout}
                     className="w-full text-on-surface-variant flex items-center gap-3 px-4 py-2.5 hover:bg-surface-container-highest transition-all duration-200 rounded-xl text-sm"

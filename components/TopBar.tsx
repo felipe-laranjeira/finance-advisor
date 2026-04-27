@@ -1,13 +1,16 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { User as UserIcon, LogOut, ShieldCheck, UserCog } from 'lucide-react';
+import { User as UserIcon, LogOut, ShieldCheck, UserCog, Eye, EyeOff } from 'lucide-react';
 import Image from 'next/image';
 import { useAuth } from '@/components/AuthProvider';
+import { useMask } from '@/components/MaskProvider';
 import { motion, AnimatePresence } from 'motion/react';
+import { cn } from '@/lib/utils';
 
 export function TopBar() {
   const { user, signOut, updateUser } = useAuth();
+  const { isMasked, toggleMask } = useMask();
   const [showDropdown, setShowDropdown] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
@@ -136,6 +139,19 @@ export function TopBar() {
         </div>
         
         <div className="flex items-center gap-2 md:gap-5">
+          <button 
+            onClick={toggleMask}
+            className={cn(
+              "p-2 md:p-2.5 rounded-full transition-all duration-300 flex items-center justify-center border",
+              isMasked 
+                ? "bg-secondary/10 text-secondary border-secondary/20 shadow-inner" 
+                : "hover:bg-surface-container-highest text-on-surface-variant border-transparent"
+            )}
+            title={isMasked ? "Mostrar valores" : "Esconder valores"}
+          >
+            {isMasked ? <EyeOff size={20} /> : <Eye size={20} />}
+          </button>
+
           <div className="hidden lg:block mr-2 text-right">
             <p className="text-sm font-bold text-on-surface leading-tight">{user?.name || 'Usuário'}</p>
           </div>

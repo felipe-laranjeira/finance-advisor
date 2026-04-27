@@ -18,6 +18,7 @@ import { useAuth } from '@/components/AuthProvider';
 import { useLayout } from '@/components/LayoutProvider';
 import { cn, formatCurrency } from '@/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
+import { MaskedValue } from '@/components/MaskedValue';
 
 interface Category {
   id: string;
@@ -233,7 +234,7 @@ export default function BudgetPage() {
                   <span className="text-xs font-black uppercase tracking-widest text-on-surface-variant">Limite de Consumo</span>
                 </div>
                 <h3 className="text-4xl font-black font-headline text-tertiary tracking-tighter">
-                  {formatCurrency(budgetWithPercentages.totalExpenseBudget)}
+                  <MaskedValue value={budgetWithPercentages.totalExpenseBudget} />
                 </h3>
               </div>
             </motion.div>
@@ -252,7 +253,7 @@ export default function BudgetPage() {
                   <span className="text-xs font-black uppercase tracking-widest">Meta de Aporte Mensal</span>
                 </div>
                 <h3 className="text-4xl font-black font-headline tracking-tighter">
-                  {formatCurrency(budgetWithPercentages.totalInvestmentBudget)}
+                  <MaskedValue value={budgetWithPercentages.totalInvestmentBudget} />
                 </h3>
               </div>
             </motion.div>
@@ -339,7 +340,7 @@ export default function BudgetPage() {
                                     }}
                                     className={cn("text-lg font-black flex items-center gap-1 active:scale-95 transition-transform", sIdx === 0 ? "text-tertiary" : "text-primary")}
                                   >
-                                    {formatCurrency(item.limit)}
+                                    <MaskedValue value={item.limit} />
                                   </button>
                                 )}
                               </div>
@@ -391,7 +392,7 @@ export default function BudgetPage() {
                                       }}
                                       className={cn("text-sm md:text-base font-black transition-colors flex items-center gap-2 group/btn", sIdx === 0 ? "text-on-surface hover:text-tertiary" : "text-on-surface hover:text-primary")}
                                     >
-                                      {formatCurrency(item.limit)}
+                                      <MaskedValue value={item.limit} />
                                       <Plus size={14} className="opacity-0 lg:group-hover/btn:opacity-100 transition-opacity" />
                                     </button>
                                   )}
