@@ -85,7 +85,7 @@ export default function DashboardPage() {
         const [latestInc, latestExp, latestInv] = await Promise.all([
           supabase.from('incoming').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(1),
           supabase.from('expense_transactions').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(1),
-          supabase.from('investment_transactions').select('date').eq('user_id', user.id).order('date', { ascending: false }).limit(1)
+          supabase.from('investments').select('reference_date').eq('user_id', user.id).order('reference_date', { ascending: false }).limit(1)
         ]);
 
         const hasAnyData = (latestInc.data && latestInc.data.length > 0) || 
@@ -97,7 +97,7 @@ export default function DashboardPage() {
           let dates: Date[] = [];
           if (latestInc.data?.[0]?.date) dates.push(new Date(latestInc.data[0].date));
           if (latestExp.data?.[0]?.date) dates.push(new Date(latestExp.data[0].date));
-          if (latestInv.data?.[0]?.date) dates.push(new Date(latestInv.data[0].date));
+          if (latestInv.data?.[0]?.reference_date) dates.push(new Date(latestInv.data[0].reference_date));
 
           let latestDate = dates.length > 0 ? new Date(Math.max(...dates.map(d => d.getTime()))) : null;
 
@@ -165,17 +165,6 @@ export default function DashboardPage() {
 
         if (expensesErr) throw expensesErr;
 
-        // Fetch Investment flows for selected month
-        const { data: invFlows, error: invFlowsErr } = await supabase
-          .from('investment_transactions')
-          .select('*, investiments_categories(name)')
-          .eq('user_id', user.id)
-          .gte('date', startDate)
-          .lte('date', endDate);
-        
-        if (invFlowsErr) throw invFlowsErr;
-        setInvestmentFlows(invFlows || []);
-
         // Fetch Investment Assets for selected month
         const { data: invAssets, error: invAssetsErr } = await supabase
           .from('investments')
@@ -185,6 +174,7 @@ export default function DashboardPage() {
 
         if (invAssetsErr) throw invAssetsErr;
         setInvestmentAssets(invAssets || []);
+        setInvestmentFlows([]); // No longer using investment_transactions
         // Fetch Budgets
         const [{ data: budgetData }, { data: invBudgetData }] = await Promise.all([
           supabase.from('expense_budgets').select('*, transactions_categories(name)').eq('user_id', user.id),
@@ -204,8 +194,7 @@ export default function DashboardPage() {
             Promise.all([
               supabase.from('incoming').select('amount').eq('user_id', user.id).gte('date', start).lte('date', end),
               supabase.from('expense_transactions').select('amount, transactions_categories(name)').eq('user_id', user.id).gte('date', start).lte('date', end),
-              supabase.from('investment_transactions').select('amount').eq('user_id', user.id).gte('date', start).lte('date', end)
-            ]).then(([inc, exp, inv]) => {
+            ]).then(([inc, exp]) => {
               const incomeSum = inc.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0;
               
               let totalExpTableFlow = 0;
@@ -220,16 +209,18 @@ export default function DashboardPage() {
                 }
               });
 
-              const invTableSum = Math.abs(inv.data?.reduce((acc, curr) => acc + Number(curr.amount), 0) || 0);
+              // We no longer fetch from investment_transactions. 
+              // Aporte is derived from expenses categorized as "Investimentos".
+              const invTableSum = 0;
               
               const consumptionSum = totalExpTableFlow - expInvSum;
-              const totalInvestedSum = invTableSum + expInvSum;
+              const totalInvestedSum = expInvSum;
 
               return {
                 month: months[d.getUTCMonth()],
                 income: incomeSum,
                 expense: totalExpTableFlow,
-                balance: incomeSum - (totalExpTableFlow + invTableSum),
+                balance: incomeSum - totalExpTableFlow,
                 investmentRate: incomeSum > 0 ? (totalInvestedSum / incomeSum) * 100 : 0
               };
             })
