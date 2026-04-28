@@ -51,7 +51,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           if (initialError) {
             console.warn('Supabase getSession error:', initialError.message);
             // If tokens are broken, sign out to clear them
-            if (initialError.message.includes('Refresh Token Not Found') || initialError.message.includes('refresh_token_not_found')) {
+            if (
+              initialError.message.includes('Refresh Token Not Found') || 
+              initialError.message.includes('refresh_token_not_found') ||
+              initialError.message.includes('invalid refresh token')
+            ) {
+               console.info('Cleaning up stale session...');
+               localStorage.removeItem('app_user');
                await supabase.auth.signOut();
             }
           }
@@ -62,86 +68,97 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         
         const storedUser = localStorage.getItem('app_user');
         if (storedUser) {
-          const parsedUser = JSON.parse(storedUser);
-
-          // If Supabase doesn't have a session but we have one in localStorage, try to restore it
-          if (!existingSession && parsedUser.session) {
-            try {
-              const { error: sessionError } = await supabase.auth.setSession({
-                access_token: parsedUser.session.access_token,
-                refresh_token: parsedUser.session.refresh_token
-              });
-              
-              if (sessionError) {
-                console.warn('Failed to restore Supabase session:', sessionError.message);
-                // Clear state on common authentication failures
-                if (
-                  sessionError.message.includes('Refresh Token Not Found') || 
-                  sessionError.message.includes('refresh_token_not_found') ||
-                  sessionError.message.includes('invalid_grant') ||
-                  sessionError.message.includes('Refresh token has expired')
-                ) {
-                  localStorage.removeItem('app_user');
-                  setUser(null);
-                  await supabase.auth.signOut();
-                  if (pathname !== '/' && pathname !== '/registrar') {
-                    router.push('/');
+          try {
+            const parsedUser = JSON.parse(storedUser);
+  
+            // If Supabase doesn't have a session but we have one in localStorage, try to restore it
+            if (!existingSession && parsedUser.session) {
+              try {
+                const { error: sessionError } = await supabase.auth.setSession({
+                  access_token: parsedUser.session.access_token,
+                  refresh_token: parsedUser.session.refresh_token
+                });
+                
+                if (sessionError) {
+                  console.warn('Failed to restore Supabase session:', sessionError.message);
+                  // Clear state on common authentication failures
+                  if (
+                    sessionError.message.includes('Refresh Token Not Found') || 
+                    sessionError.message.includes('refresh_token_not_found') ||
+                    sessionError.message.includes('invalid_grant') ||
+                    sessionError.message.includes('Refresh token has expired') ||
+                    sessionError.message.includes('invalid refresh token')
+                  ) {
+                    localStorage.removeItem('app_user');
+                    setUser(null);
+                    await supabase.auth.signOut();
+                    if (pathname !== '/' && pathname !== '/registrar') {
+                      router.push('/');
+                    }
+                    return;
                   }
-                  return;
                 }
+              } catch (sessErr) {
+                console.error('Critical error restoring session:', sessErr);
               }
-            } catch (sessErr) {
-              console.error('Critical error restoring session:', sessErr);
-            }
-          }
-          
-          // Re-verify current session
-          const { data: { session: currentSession }, error: sessionCheckError } = await supabase.auth.getSession();
-          
-          if (sessionCheckError || !currentSession) {
-             console.warn('No active session after restore attempt');
-             localStorage.removeItem('app_user');
-             setUser(null);
-             await supabase.auth.signOut();
-             if (pathname !== '/' && pathname !== '/registrar') {
-               router.push('/');
-             }
-             return;
-          }
-
-          // Verify user status in DB
-          const { data, error } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', parsedUser.id)
-            .single();
-
-          if (error) {
-            console.error('Erro ao verificar usuário no banco:', error.message);
-            // If session expired or token invalid
-            if (error.code === 'PGRST301' || error.message.includes('permission denied') || error.message.includes('JWT expired')) {
-               console.warn('Sessão expirada ou acesso negado.');
-               await supabase.auth.signOut();
             }
             
+            // Re-verify current session
+            const { data: { session: currentSession }, error: sessionCheckError } = await supabase.auth.getSession();
+            
+            if (sessionCheckError || !currentSession) {
+               console.warn('No active session after restore attempt');
+               localStorage.removeItem('app_user');
+               setUser(null);
+               await supabase.auth.signOut();
+               if (pathname !== '/' && pathname !== '/registrar') {
+                 router.push('/');
+               }
+               return;
+            }
+  
+            // Verify user status in DB
+            const { data, error } = await supabase
+              .from('users')
+              .select('*')
+              .eq('id', parsedUser.id)
+              .single();
+  
+            if (error) {
+              console.error('Erro ao verificar usuário no banco:', error.message);
+              // If session expired or token invalid
+              if (
+                error.code === 'PGRST301' || 
+                error.message.includes('permission denied') || 
+                error.message.includes('JWT expired') ||
+                error.message.includes('Refresh Token Not Found')
+              ) {
+                 console.warn('Sessão expirada ou acesso negado.');
+                 await supabase.auth.signOut();
+                 localStorage.removeItem('app_user');
+                 setUser(null);
+                 if (pathname !== '/' && pathname !== '/registrar') {
+                   router.push('/');
+                 }
+                 return;
+              }
+            }
+  
+            if (data && data.status === 'Active') {
+              setUser(data);
+            } else {
+              console.warn('Usuário inativo ou não encontrado.');
+              await supabase.auth.signOut();
+              localStorage.removeItem('app_user');
+              setUser(null);
+              if (pathname !== '/' && pathname !== '/registrar') {
+                router.push('/');
+              }
+            }
+          } catch (parseErr) {
+            console.error('Error parsing stored user:', parseErr);
             localStorage.removeItem('app_user');
             setUser(null);
-            if (pathname !== '/' && pathname !== '/registrar') {
-              router.push('/');
-            }
-            return;
-          }
-
-          if (data && data.status === 'Active') {
-            setUser(data);
-          } else {
-            console.warn('Usuário inativo ou não encontrado.');
-            await supabase.auth.signOut();
-            localStorage.removeItem('app_user');
-            setUser(null);
-            if (pathname !== '/' && pathname !== '/registrar') {
-              router.push('/');
-            }
           }
         } else {
           // No stored user, ensure Supabase is also signed out
@@ -166,13 +183,41 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
-        if (!session) {
-          localStorage.removeItem('app_user');
-          setUser(null);
-          if (pathname !== '/' && pathname !== '/registrar') {
-            router.push('/');
+      console.log(`Auth event: ${event}`);
+      
+      if (session && (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED')) {
+        const storedUser = localStorage.getItem('app_user');
+        if (storedUser) {
+          try {
+            const parsedUser = JSON.parse(storedUser);
+            // Only update if it's the same user or if we don't have a user yet
+            if (!user || user.id === session.user.id) {
+              const updatedUser = {
+                ...parsedUser,
+                session: {
+                  access_token: session.access_token,
+                  refresh_token: session.refresh_token,
+                  expires_at: session.expires_at,
+                  expires_in: session.expires_in,
+                  token_type: session.token_type,
+                  user: session.user
+                }
+              };
+              localStorage.setItem('app_user', JSON.stringify(updatedUser, getCircularReplacer()));
+              // We don't necessarily call setUser here to avoid infinite loops if this is called during render
+              // but the session is now synced for the next reload
+            }
+          } catch (err) {
+            console.error('Error updating stored session:', err);
           }
+        }
+      }
+
+      if (event === 'SIGNED_OUT') {
+        localStorage.removeItem('app_user');
+        setUser(null);
+        if (pathname !== '/' && pathname !== '/registrar') {
+          router.push('/');
         }
       }
     });
@@ -180,7 +225,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     return () => {
       subscription.unsubscribe();
     };
-  }, [router, pathname]);
+  }, [router, pathname, user]);
 
   const login = async (userData: AppUser) => {
     // If a Supabase session was provided, set it in the client
