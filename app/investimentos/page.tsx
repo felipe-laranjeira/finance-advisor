@@ -32,6 +32,8 @@ export default function InvestmentsPage() {
   const [loading, setLoading] = useState(true);
   const [availableMonths, setAvailableMonths] = useState<string[]>([]);
   const [selectedMonthYear, setSelectedMonthYear] = useState<string>('Todos');
+  const [availableCategories, setAvailableCategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string>('Todas');
   const [isImporting, setIsImporting] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -88,6 +90,31 @@ export default function InvestmentsPage() {
     }
   }, [user, monthNames]);
 
+  const fetchAvailableCategories = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
+        .from('investiments_categories')
+        .select('name')
+        .order('name');
+      
+      if (error) {
+        console.error('Error fetching categories:', error);
+        // Fallback to standard categories if table or query fails
+        setAvailableCategories(['Ações', 'FIIs', 'Renda Fixa', 'Tesouro', 'Cripto', 'Outros']);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        setAvailableCategories(data.map(c => c.name));
+      } else {
+        setAvailableCategories(['Ações', 'FIIs', 'Renda Fixa', 'Tesouro', 'Cripto', 'Outros']);
+      }
+    } catch (err) {
+      console.error('Erro de conexão ao buscar categorias:', err);
+      setAvailableCategories(['Ações', 'FIIs', 'Renda Fixa', 'Tesouro', 'Cripto', 'Outros']);
+    }
+  }, []);
+
   const fetchInvestments = useCallback(async () => {
     if (!user) return;
 
@@ -117,6 +144,10 @@ export default function InvestmentsPage() {
         }
       }
 
+      if (selectedCategory !== 'Todas') {
+        query = query.eq('asset_type', selectedCategory);
+      }
+
       const { data, count, error } = await query
         .order('reference_date', { ascending: false })
         .order('asset_name', { ascending: true })
@@ -133,12 +164,13 @@ export default function InvestmentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user, selectedMonthYear, currentPage, pageSize, monthNames]);
+  }, [user, selectedMonthYear, selectedCategory, currentPage, pageSize, monthNames]);
 
   useEffect(() => {
     fetchAvailableMonths();
+    fetchAvailableCategories();
     fetchInvestments();
-  }, [fetchAvailableMonths, fetchInvestments]);
+  }, [fetchAvailableMonths, fetchAvailableCategories, fetchInvestments]);
 
   const handleSaveInvestment = async (data: any) => {
     if (!user) return;
@@ -330,16 +362,36 @@ export default function InvestmentsPage() {
 
           {/* 3. Botões de filtro */}
           <div className="flex flex-wrap items-center gap-4 mb-8">
-            <div className="flex items-center gap-3 px-6 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5">
+            <div className="flex items-center gap-3 px-6 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5 shadow-sm hover:border-primary/20 transition-all">
               <Calendar size={18} className="text-primary" />
               <select 
                 value={selectedMonthYear}
-                onChange={(e) => setSelectedMonthYear(e.target.value)}
-                className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer outline-none"
+                onChange={(e) => {
+                  setSelectedMonthYear(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer outline-none min-w-[120px]"
               >
                 <option value="Todos">Todos os Meses</option>
                 {availableMonths.map(month => (
                   <option key={month} value={month}>{month}</option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-3 px-6 py-3 bg-surface-container-low rounded-full text-sm font-bold text-on-surface-variant border border-outline-variant/5 shadow-sm hover:border-primary/20 transition-all">
+              <Filter size={18} className="text-primary" />
+              <select 
+                value={selectedCategory}
+                onChange={(e) => {
+                  setSelectedCategory(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="bg-transparent border-none focus:ring-0 p-0 text-sm font-bold cursor-pointer outline-none min-w-[120px]"
+              >
+                <option value="Todas">Todas as Categorias</option>
+                {availableCategories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
                 ))}
               </select>
             </div>
