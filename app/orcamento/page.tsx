@@ -315,7 +315,7 @@ export default function BudgetPage() {
                                     />
                                   </div>
                                   <span className="text-[10px] font-black text-on-surface-variant">
-                                    {item.percentage.toFixed(1)}% da seção
+                                    {item.percentage.toFixed(1)}% do orçamento
                                   </span>
                                 </div>
                               </div>
@@ -356,7 +356,7 @@ export default function BudgetPage() {
                             <tr className="bg-surface-container-highest/30">
                               <th className="px-6 md:px-8 py-4 md:py-5 text-[10px] md:text-xs font-black uppercase tracking-widest text-on-surface-variant">Categoria</th>
                               <th className="px-6 md:px-8 py-4 md:py-5 text-[10px] md:text-xs font-black uppercase tracking-widest text-on-surface-variant">Meta / Limite</th>
-                              <th className="px-6 md:px-8 py-4 md:py-5 text-[10px] md:text-xs font-black uppercase tracking-widest text-on-surface-variant">% do Grupo</th>
+                              <th className="px-6 md:px-8 py-4 md:py-5 text-[10px] md:text-xs font-black uppercase tracking-widest text-on-surface-variant">% do Orçamento</th>
                               <th className="px-6 md:px-8 py-4 md:py-5 text-[10px] md:text-xs font-black uppercase tracking-widest text-on-surface-variant text-right">Ação</th>
                             </tr>
                           </thead>
