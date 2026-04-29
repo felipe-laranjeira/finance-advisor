@@ -114,7 +114,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           // Verify session integrity
           const { data: { session }, error: sessionError } = await supabase.auth.getSession();
           
-          if (sessionError || !session) {
+          if (sessionError) {
+            console.warn('Supabase session error:', sessionError.message);
+            // If the refresh token is missing or invalid, we must clear state
+            if (
+              sessionError.message.includes('Refresh Token Not Found') || 
+              sessionError.message.includes('refresh_token_not_found') ||
+              sessionError.message.includes('invalid refresh token')
+            ) {
+              localStorage.removeItem('app_user');
+              setUser(null);
+              // Ensure Supabase client is also cleared
+              await supabase.auth.signOut();
+              if (pathname !== '/' && pathname !== '/registrar') {
+                router.push('/');
+              }
+              return;
+            }
+          }
+          
+          if (!session) {
             // Try to restore from stored session if available
             if (parsedUser.session?.access_token && parsedUser.session?.refresh_token) {
               const { error: restoreError } = await supabase.auth.setSession({
@@ -123,12 +142,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               });
               
               if (restoreError) {
-                console.warn('Could not restore session, signing out');
+                console.warn('Could not restore session:', restoreError.message);
                 signOut();
                 return;
               }
             } else {
-              console.warn('No session found, signing out');
+              console.warn('No session found in Supabase or storage, signing out');
               signOut();
               return;
             }

@@ -937,10 +937,15 @@ export default function DashboardPage() {
                     <Tooltip 
                       cursor={{ fill: '#f2f4f7' }}
                       contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                      formatter={(value: any, name: any) => [isMasked ? '••••' : formatCurrency(Number(value)), name === 'spent' ? 'Gasto' : 'Limite']}
+                      formatter={(value: any, name: any) => [isMasked ? '••••' : formatCurrency(Number(value)), name]}
                     />
-                    <Bar dataKey="limit" name="Limite" fill="#e0e3e6" radius={[0, 4, 4, 0]} barSize={20} />
-                    <Bar dataKey="spent" name="Gasto" radius={[0, 4, 4, 0]} barSize={20}>
+                    <Legend 
+                      verticalAlign="top" 
+                      align="right" 
+                      wrapperStyle={{ paddingBottom: '20px', fontSize: '10px', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}
+                    />
+                    <Bar dataKey="limit" name="Orçado" fill="#e0e3e6" radius={[0, 4, 4, 0]} barSize={20} />
+                    <Bar dataKey="spent" name="Realizado" radius={[0, 4, 4, 0]} barSize={20}>
                       {stats.budgetAnalysis.map((entry, index) => (
                         <Cell 
                           key={`cell-${index}`} 
