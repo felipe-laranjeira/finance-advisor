@@ -11,7 +11,7 @@ interface AppUser {
   name: string;
   email: string;
   photo_url?: string;
-  status: 'Active' | 'Inactive';
+  status: 'Ativo' | 'Inativo';
   session?: any; // Include Supabase session
 }
 
@@ -43,13 +43,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   // Memoize signOut to prevent re-renders in children like SessionManager
   const signOut = useCallback(async () => {
     try {
+      // Clear localStorage FIRST to prevent any loops during async operations
+      localStorage.removeItem('app_user');
+      setUser(null);
+      
       await supabase.auth.signOut();
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
-      localStorage.removeItem('app_user');
-      setUser(null);
-      router.push('/');
+      // Only redirect if not already at the login page
+      if (window.location.pathname !== '/') {
+        router.push('/');
+      }
     }
   }, [router]);
 
@@ -90,19 +95,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       
       try {
         checkingRef.current = true;
-        // Check if we already have a user in state to avoid redundant checks on path change
+        // Check if we already have a user in state
         const isProtectedRoute = pathname !== '/' && pathname !== '/registrar';
-        if (user && isProtectedRoute) {
-          setLoading(false);
-          return;
-        }
-
+        
         const storedUserJson = localStorage.getItem('app_user');
         if (!storedUserJson) {
+           setUser(null);
            setLoading(false);
-           // Handle protected routes
-           const protectedRoutes = ['/painel', '/receitas', '/despesas', '/investimentos', '/orcamento'];
-           if (protectedRoutes.some(path => pathname.startsWith(path))) {
+           if (isProtectedRoute) {
              router.push('/');
            }
            return;
@@ -111,66 +111,76 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         try {
           const parsedUser = JSON.parse(storedUserJson);
           
-          // Verify session integrity
+          // Verify session integrity with Supabase
           const { data: { session }, error: sessionError } = await supabase.auth.getSession();
           
           if (sessionError) {
             console.warn('Supabase session error:', sessionError.message);
-            // If the refresh token is missing or invalid, we must clear state
-            if (
-              sessionError.message.includes('Refresh Token Not Found') || 
-              sessionError.message.includes('refresh_token_not_found') ||
-              sessionError.message.includes('invalid refresh token')
-            ) {
-              localStorage.removeItem('app_user');
-              setUser(null);
-              // Ensure Supabase client is also cleared
-              await supabase.auth.signOut();
-              if (pathname !== '/' && pathname !== '/registrar') {
-                router.push('/');
-              }
+            if (sessionError.message.includes('refresh_token_not_found') || sessionError.message.includes('Refresh Token Not Found')) {
+              signOut();
               return;
             }
           }
           
           if (!session) {
-            // Try to restore from stored session if available
-            if (parsedUser.session?.access_token && parsedUser.session?.refresh_token) {
-              const { error: restoreError } = await supabase.auth.setSession({
-                access_token: parsedUser.session.access_token,
-                refresh_token: parsedUser.session.refresh_token
-              });
-              
-              if (restoreError) {
-                console.warn('Could not restore session:', restoreError.message);
-                signOut();
-                return;
-              }
+            // No Supabase session, but we have a stored user? Try to sync.
+            if (parsedUser.session?.access_token) {
+               const { error: restoreError } = await supabase.auth.setSession({
+                 access_token: parsedUser.session.access_token,
+                 refresh_token: parsedUser.session.refresh_token
+               });
+               if (restoreError) {
+                 signOut();
+                 return;
+               }
             } else {
-              console.warn('No session found in Supabase or storage, signing out');
-              signOut();
-              return;
+               signOut();
+               return;
             }
           }
 
-          // Verify user in DB to ensure they are still active
-          const { data: dbUser, error: dbError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', parsedUser.id)
-            .single();
+          const userId = session?.user?.id || parsedUser.id;
 
-          if (dbError || !dbUser || dbUser.status !== 'Active') {
-            console.error('User validation failed or user inactive');
-            signOut();
+          // Optimization: If user already set and ID matches, don't re-render/re-fetch unless necessary
+          if (user && user.id === userId) {
+            setLoading(false);
+            if (pathname === '/') router.push('/painel');
             return;
           }
 
-          // Update user state if needed
-          setUser(prev => {
-            if (prev && prev.id === dbUser.id && prev.status === dbUser.status) return prev;
-            return { ...dbUser, session: parsedUser.session };
-          });
+          // Verify user in DB (RLS check)
+          const { data: dbUser, error: dbError } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', userId)
+            .single();
+
+          if (dbError || !dbUser) {
+            console.warn('RLS check failed or user not in DB, but session exists. Using stored profile fallback.');
+            const correctedUser = { ...parsedUser, id: userId };
+            setUser(correctedUser);
+            localStorage.setItem('app_user', JSON.stringify(correctedUser, getCircularReplacer()));
+            setLoading(false);
+            if (pathname === '/') router.push('/painel');
+            return;
+          }
+
+          if (dbUser.status !== 'Ativo') {
+            console.error('Account inactive. Status:', dbUser.status);
+            localStorage.removeItem('app_user');
+            setUser(null);
+            await signOut();
+            return;
+          }
+
+          const finalUser = { ...dbUser, session: session || parsedUser.session };
+          setUser(finalUser);
+          localStorage.setItem('app_user', JSON.stringify(finalUser, getCircularReplacer()));
+
+          // Redirect if at login page
+          if (pathname === '/') {
+            router.push('/painel');
+          }
 
         } catch (err) {
           console.error('Auth verification error:', err);
@@ -183,7 +193,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     };
 
     checkUser();
-  }, [pathname, router, signOut, user]); // Stabilized dependencies
+  }, [pathname, router, signOut]); // Removed 'user' from dependencies to avoid loop
+
+  useEffect(() => {
+    // Synchronize logout across tabs
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'app_user' && e.newValue === null) {
+        console.info('Logout detectado em outra aba. Sincronizando...');
+        setUser(null);
+        if (pathname !== '/' && pathname !== '/registrar') {
+          router.push('/');
+        }
+      }
+    };
+
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, [pathname, router]);
 
   useEffect(() => {
     // Listen for auth state changes but avoid state updates that trigger re-runs

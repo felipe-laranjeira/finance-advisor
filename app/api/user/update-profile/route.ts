@@ -1,29 +1,12 @@
 import { NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase';
-import bcrypt from 'bcryptjs';
 
 export async function PATCH(request: Request) {
   try {
-    const { userId, name, email, currentPassword } = await request.json();
+    const { userId, name, email } = await request.json();
 
-    if (!userId || !currentPassword) {
-      return NextResponse.json({ error: 'Usuário e senha atual são obrigatórios' }, { status: 400 });
-    }
-
-    // Verify current password first using ADMIN client
-    const { data: user, error: fetchError } = await supabaseAdmin
-      .from('users')
-      .select('password_hash')
-      .eq('id', userId)
-      .single();
-
-    if (fetchError || !user) {
-      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
-    }
-
-    const isMatch = bcrypt.compareSync(currentPassword, user.password_hash);
-    if (!isMatch) {
-      return NextResponse.json({ error: 'Senha atual incorreta' }, { status: 401 });
+    if (!userId) {
+      return NextResponse.json({ error: 'ID do usuário é obrigatório' }, { status: 400 });
     }
 
     if (!name && !email) {
@@ -34,39 +17,37 @@ export async function PATCH(request: Request) {
     if (name) updateData.name = name;
     if (email) updateData.email = email.toLowerCase();
 
-    // If email is changing, check if it's already in use using ADMIN client
+    // If email is changing, we should also update it in Supabase Auth
     if (email) {
-      const { data: existingUser } = await supabaseAdmin
-        .from('users')
-        .select('id')
-        .eq('email', email.toLowerCase())
-        .neq('id', userId)
-        .maybeSingle();
-
-      if (existingUser) {
-        return NextResponse.json({ error: 'Este e-mail já está em uso por outro usuário' }, { status: 400 });
-      }
+       const { error: authEmailError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+         email: email.toLowerCase()
+       });
+       if (authEmailError) {
+         console.error('Failed to update email in Supabase Auth:', authEmailError);
+         return NextResponse.json({ error: 'Erro ao atualizar e-mail na autenticação: ' + authEmailError.message }, { status: 400 });
+       }
     }
 
-    const { data, error } = await supabaseAdmin
+    const { data: updatedUser, error: dbError } = await supabaseAdmin
       .from('users')
       .update(updateData)
       .eq('id', userId)
       .select()
       .single();
 
-    if (error) {
-      throw error;
+    if (dbError) {
+      console.error('Database update error:', dbError);
+      throw dbError;
     }
 
     return NextResponse.json({
       message: 'Perfil atualizado com sucesso',
       user: {
-        id: data.id,
-        name: data.name,
-        email: data.email,
-        photo_url: data.photo_url,
-        status: data.status
+        id: updatedUser.id,
+        name: updatedUser.name,
+        email: updatedUser.email,
+        photo_url: updatedUser.photo_url,
+        status: updatedUser.status
       }
     });
 

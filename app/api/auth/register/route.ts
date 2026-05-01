@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { supabase, supabaseAdmin } from '@/lib/supabase';
-import bcrypt from 'bcryptjs';
 
 export async function POST(request: Request) {
   try {
@@ -22,14 +21,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Este e-mail já está em uso' }, { status: 400 });
     }
 
-    // Hash password
-    const salt = bcrypt.genSaltSync(10);
-    const password_hash = bcrypt.hashSync(password, salt);
-
     // --- START AUTH SYNC: Create Supabase Auth user FIRST to get the ID ---
     let authUserId = null;
     try {
-      const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
         email,
         password,
         email_confirm: true,
@@ -37,16 +32,15 @@ export async function POST(request: Request) {
       });
       
       if (authError) {
-        if (authError.message.includes('already registered')) {
-          // If already exists, we might need to find it, but for registration this is an error
+        if (authError.message.includes('already registered') || authError.message.includes('unique_email')) {
           return NextResponse.json({ error: 'Este e-mail já está em uso' }, { status: 400 });
         }
         throw authError;
       }
-      authUserId = authUser.user.id;
+      authUserId = authData.user.id;
     } catch (authErr: any) {
       console.error('Auth Sync error during registration:', authErr);
-      return NextResponse.json({ error: 'Erro ao sincronizar autenticação: ' + authErr.message }, { status: 500 });
+      return NextResponse.json({ error: 'Erro ao criar conta de autenticação.' }, { status: 500 });
     }
     // --- END AUTH SYNC ---
 
@@ -55,12 +49,10 @@ export async function POST(request: Request) {
       .from('users')
       .insert([
         {
-          id: authUserId, // Use the same ID
+          id: authUserId,
           name,
           email,
-          password_hash,
-          salt,
-          status: 'Inactive',
+          status: 'Ativo', // Status padrão como Ativo para simplificar
         }
       ])
       .select()
@@ -69,11 +61,12 @@ export async function POST(request: Request) {
     if (publicError) {
       // Cleanup if failed
       await supabaseAdmin.auth.admin.deleteUser(authUserId);
-      throw publicError;
+      console.error('Database Sync error:', publicError);
+      return NextResponse.json({ error: 'Erro ao criar perfil do usuário no banco de dados.' }, { status: 500 });
     }
 
     return NextResponse.json({ 
-      message: 'Conta criada com sucesso! Aguarde a ativação pelo administrador.',
+      message: 'Conta criada com sucesso!',
       user: {
         id: publicUser.id,
         name: publicUser.name,
