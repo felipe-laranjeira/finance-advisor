@@ -52,7 +52,7 @@ export async function POST(request: Request) {
           id: authUserId,
           name,
           email,
-          status: 'Ativo', // Status padrão como Ativo para simplificar
+          status: 'Inativo', // Status obrigatório como Inativo conforme REGRA 1
         }
       ])
       .select()

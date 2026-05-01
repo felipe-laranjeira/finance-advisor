@@ -54,7 +54,11 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const { data: { session } } = await supabase.auth.getSession();
+  // Get session - this also refreshes it if needed
+  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+
+  // If there's a session error or no session, ensure we don't allow protected access
+  const isInvalidSession = sessionError || !session;
 
   // Protected routes check
   const isProtectedRoute = 
@@ -64,7 +68,7 @@ export async function middleware(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/investimentos') ||
     request.nextUrl.pathname.startsWith('/orcamento');
 
-  if (isProtectedRoute && !session) {
+  if (isProtectedRoute && isInvalidSession) {
     const url = request.nextUrl.clone();
     url.pathname = '/';
     url.searchParams.set('redirectedFrom', request.nextUrl.pathname);

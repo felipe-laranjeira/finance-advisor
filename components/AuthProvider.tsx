@@ -40,23 +40,61 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();
   const checkingRef = useRef(false);
 
-  // Memoize signOut to prevent re-renders in children like SessionManager
+  const [showInactivityModal, setShowInactivityModal] = useState(false);
+  const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const warningTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Define signOut and login early to avoid TDZ issues with resetTimers
   const signOut = useCallback(async () => {
     try {
-      // Clear localStorage FIRST to prevent any loops during async operations
+      setShowInactivityModal(false);
       localStorage.removeItem('app_user');
       setUser(null);
-      
       await supabase.auth.signOut();
     } catch (err) {
       console.error('Logout error:', err);
     } finally {
-      // Only redirect if not already at the login page
       if (window.location.pathname !== '/') {
         router.push('/');
       }
     }
   }, [router]);
+
+  const resetTimers = useCallback(() => {
+    if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+    if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+
+    if (!user) return;
+
+    // 28 minutes warning (REGRA 3.1)
+    warningTimerRef.current = setTimeout(() => {
+      setShowInactivityModal(true);
+    }, 28 * 60 * 1000);
+
+    // 30 minutes absolute logout (REGRA 3.1)
+    inactivityTimerRef.current = setTimeout(() => {
+      signOut();
+    }, 30 * 60 * 1000);
+  }, [user, signOut]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'mousemove'];
+    const handleActivity = () => {
+      if (showInactivityModal) return;
+      resetTimers();
+    };
+
+    events.forEach(event => window.addEventListener(event, handleActivity));
+    resetTimers();
+
+    return () => {
+      events.forEach(event => window.removeEventListener(event, handleActivity));
+      if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
+      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
+    };
+  }, [user, resetTimers, showInactivityModal]);
 
   // Memoize login
   const login = useCallback(async (userData: AppUser) => {
@@ -253,6 +291,33 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   return (
     <AuthContext.Provider value={{ user, loading, login, signOut, updateUser }}>
       <SessionManager />
+      {showInactivityModal && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full mx-4 border border-gray-200">
+            <h3 className="text-xl font-bold text-gray-900 mb-2">Você ainda está aí?</h3>
+            <p className="text-gray-600 mb-6">Sua sessão irá expirar em breve por inatividade. Deseja continuar conectado?</p>
+            <div className="flex flex-col gap-3">
+              <button 
+                onClick={() => {
+                  setShowInactivityModal(false);
+                  resetTimers();
+                }}
+                className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
+                id="continue-session-btn"
+              >
+                Sim, continuar
+              </button>
+              <button 
+                onClick={signOut}
+                className="w-full py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
+                id="logout-session-btn"
+              >
+                Sair agora
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {children}
     </AuthContext.Provider>
   );

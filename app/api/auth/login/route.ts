@@ -28,53 +28,18 @@ export async function POST(request: Request) {
     const { data: user, error: dbError } = await supabaseAdmin
       .from('users')
       .select('*')
-      .eq('email', email)
+      .eq('id', authUser.id) // Busca estrita pelo ID do Auth
       .single();
 
     if (dbError || !user) {
-      // If user exists in Auth but not in public table, we should create a basic profile
-      console.info(`User authenticated but profile missing for ${email}. Creating profile...`);
-      const { data: newUser, error: createError } = await supabaseAdmin
-        .from('users')
-        .insert({
-          id: authUser.id,
-          email: email,
-          name: authUser.user_metadata?.name || email.split('@')[0],
-          status: 'Ativo'
-        })
-        .select()
-        .single();
-      
-      if (createError) {
-        console.error('Failed to create missing user profile:', createError);
-        return NextResponse.json({ error: 'Erro ao sincronizar perfil do usuário' }, { status: 500 });
-      }
-
-      return NextResponse.json({
-        id: authUser.id,
-        name: newUser.name,
-        email: newUser.email,
-        photo_url: newUser.photo_url,
-        status: newUser.status,
-        session: authSession 
-      });
-    }
-
-    // 3. Simple status check
-    if (user.status !== 'Ativo') {
-      console.warn(`Login blocked: user status is ${user.status} for ${email}`);
-      // If sign-in worked but status is inactive, we sign out
       await supabase.auth.signOut();
-      return NextResponse.json({ error: 'Sua conta está inativa. Entre em contato com o administrador.' }, { status: 403 });
+      return NextResponse.json({ error: 'Perfil de usuário não encontrado ou erro de sincronização.' }, { status: 401 });
     }
 
-    // 4. Sync ID if necessary
-    if (user.id !== authUser.id) {
-       console.info(`Syncing user ID for ${email} from ${user.id} to ${authUser.id}`);
-       await supabaseAdmin
-         .from('users')
-         .update({ id: authUser.id })
-         .eq('email', email);
+    // 3. Strict status check (REGRA 1 e 2)
+    if (user.status !== 'Ativo') {
+      await supabase.auth.signOut();
+      return NextResponse.json({ error: 'Sua conta aguarda ativação pelo administrador.' }, { status: 403 });
     }
 
     return NextResponse.json({
