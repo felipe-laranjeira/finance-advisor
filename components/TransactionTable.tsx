@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { MoreVertical, Trash2, Edit2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { MoreVertical, Trash2, Edit2, ChevronUp, ChevronDown, SortAsc, SortDesc } from 'lucide-react';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'motion/react';
@@ -24,12 +24,79 @@ interface TransactionTableProps {
 }
 
 export function TransactionTable({ transactions, onDelete, onEdit }: TransactionTableProps) {
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Transaction; direction: 'asc' | 'desc' } | null>({
+    key: 'date',
+    direction: 'desc'
+  });
+
+  const sortedTransactions = useMemo(() => {
+    let sortableItems = [...transactions];
+    if (sortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        let aValue = a[sortConfig.key];
+        let bValue = b[sortConfig.key];
+
+        if (sortConfig.key === 'date') {
+          aValue = new Date(a.date).getTime();
+          bValue = new Date(b.date).getTime();
+        }
+
+        if (aValue < bValue) {
+          return sortConfig.direction === 'asc' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === 'asc' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [transactions, sortConfig]);
+
+  const requestSort = (key: keyof Transaction) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getSortIcon = (key: keyof Transaction) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <SortAsc size={14} className="opacity-20" />;
+    }
+    return sortConfig.direction === 'asc' ? <ChevronUp size={14} className="text-primary" /> : <ChevronDown size={14} className="text-primary" />;
+  };
+
   return (
     <div className="bg-transparent md:bg-surface-container-lowest md:rounded-[2.5rem] md:overflow-hidden md:border md:border-outline-variant/10 md:shadow-sm">
+      {/* Mobile Controls */}
+      <div className="flex md:hidden items-center justify-between px-2 mb-4">
+        <label className="text-[11px] font-black uppercase tracking-widest text-on-surface-variant/60">Ordenar por:</label>
+        <div className="flex gap-2">
+          <select 
+            className="bg-surface-container-low text-[11px] font-black uppercase tracking-widest px-3 py-2 rounded-xl border-none focus:ring-0"
+            value={sortConfig?.key || ''}
+            onChange={(e) => requestSort(e.target.value as keyof Transaction)}
+          >
+            <option value="date">Data</option>
+            <option value="description">Descrição</option>
+            <option value="category">Categoria</option>
+            <option value="amount">Valor</option>
+          </select>
+          <button 
+            onClick={() => setSortConfig(prev => prev ? { ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' } : null)}
+            className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-container-low text-primary"
+          >
+            {sortConfig?.direction === 'asc' ? <SortAsc size={18} /> : <SortDesc size={18} />}
+          </button>
+        </div>
+      </div>
+
       {/* Mobile Card Stacking View */}
       <div className="flex flex-col gap-4 md:hidden">
         <AnimatePresence mode="popLayout">
-          {transactions.map((t) => (
+          {sortedTransactions.map((t) => (
             <motion.div
               layout
               initial={{ opacity: 0, y: 10 }}
@@ -103,16 +170,44 @@ export function TransactionTable({ transactions, onDelete, onEdit }: Transaction
         <table className="w-full text-left border-collapse min-w-[600px]">
           <thead>
             <tr className="bg-surface-container-low/40">
-              <th className="px-6 md:px-10 py-4 md:py-6 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70">Data</th>
-              <th className="px-6 md:px-10 py-4 md:py-6 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70">Descrição</th>
-              <th className="px-6 md:px-10 py-4 md:py-6 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70">Categoria</th>
-              <th className="px-6 md:px-10 py-4 md:py-6 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70 text-right">Valor</th>
+              <th 
+                className="px-6 md:px-10 py-4 md:py-6 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70 cursor-pointer hover:bg-surface-container-high transition-colors"
+                onClick={() => requestSort('date')}
+              >
+                <div className="flex items-center gap-2">
+                  Data {getSortIcon('date')}
+                </div>
+              </th>
+              <th 
+                className="px-6 md:px-10 py-4 md:py-6 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70 cursor-pointer hover:bg-surface-container-high transition-colors"
+                onClick={() => requestSort('description')}
+              >
+                <div className="flex items-center gap-2">
+                  Descrição {getSortIcon('description')}
+                </div>
+              </th>
+              <th 
+                className="px-6 md:px-10 py-4 md:py-6 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70 cursor-pointer hover:bg-surface-container-high transition-colors"
+                onClick={() => requestSort('category')}
+              >
+                <div className="flex items-center gap-2">
+                  Categoria {getSortIcon('category')}
+                </div>
+              </th>
+              <th 
+                className="px-6 md:px-10 py-4 md:py-6 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70 text-right cursor-pointer hover:bg-surface-container-high transition-colors"
+                onClick={() => requestSort('amount')}
+              >
+                <div className="flex items-center justify-end gap-2">
+                  Valor {getSortIcon('amount')}
+                </div>
+              </th>
               <th className="px-6 md:px-10 py-4 md:py-6 text-[10px] md:text-[11px] font-black uppercase tracking-widest text-on-surface-variant/70 text-right">Ações</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-outline-variant/5">
             <AnimatePresence mode="popLayout">
-              {transactions.map((t) => (
+              {sortedTransactions.map((t) => (
                 <motion.tr 
                   layout
                   initial={{ opacity: 0 }}

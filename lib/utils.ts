@@ -16,6 +16,18 @@ export const formatDate = (date: Date) => {
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'UTC' }).format(date);
 };
 
+export const formatReferenceDate = (dateString: string) => {
+  try {
+    const date = new Date(dateString + 'T12:00:00'); // Add time to avoid timezone issues
+    const month = new Intl.DateTimeFormat('pt-BR', { month: 'short' }).format(date);
+    const capitalizedMonth = month.charAt(0) ? month.charAt(0).toUpperCase() + month.slice(1).replace('.', '') : '';
+    const year = date.getFullYear();
+    return `${capitalizedMonth}/${year}`;
+  } catch (e) {
+    return dateString;
+  }
+};
+
 export const getCircularReplacer = () => {
   const seen = new WeakSet();
   return (key: string, value: any) => {
