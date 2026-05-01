@@ -32,6 +32,11 @@ export async function POST(request: Request) {
       .single();
 
     if (dbError || !user) {
+      console.error(`Login profiles search failed for UUID: ${authUser.id}`, { 
+        error: dbError?.message, 
+        code: dbError?.code,
+        details: dbError?.details
+      });
       await supabase.auth.signOut();
       return NextResponse.json({ error: 'Perfil de usuário não encontrado ou erro de sincronização.' }, { status: 401 });
     }
