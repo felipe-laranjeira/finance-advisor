@@ -272,19 +272,6 @@ export default function Page() {
       return;
     }
 
-    // EXPLICIT DB CHECK TO BE SURE USER EXISTS IN public.users (Avoid dead sessions)
-    const { data: dbUser, error: dbUserError } = await supabase
-      .from('users')
-      .select('id')
-      .eq('id', user.id)
-      .maybeSingle();
-
-    if (dbUserError || !dbUser) {
-       console.error('User not found in DB:', user.id, dbUserError);
-       alert('Erro Crítico: Seu perfil de usuário não foi encontrado no servidor.\nIsso pode ocorrer se o banco de dados foi resetado.\n\nPor favor, faça LOGIN novamente para sincronizar seu ID.');
-       return;
-    }
-
     const payload = {
       description: data.description,
       amount: data.amount,

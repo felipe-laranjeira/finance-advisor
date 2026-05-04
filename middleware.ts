@@ -54,34 +54,8 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  // Get session - this also refreshes it if needed
-  const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-
-  // If there's a session error or no session, ensure we don't allow protected access
-  const isInvalidSession = sessionError || !session;
-
-  // Protected routes check
-  const isProtectedRoute = 
-    request.nextUrl.pathname.startsWith('/painel') ||
-    request.nextUrl.pathname.startsWith('/receitas') ||
-    request.nextUrl.pathname.startsWith('/despesas') ||
-    request.nextUrl.pathname.startsWith('/investimentos') ||
-    request.nextUrl.pathname.startsWith('/orcamento');
-
-  if (isProtectedRoute && isInvalidSession) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/';
-    url.searchParams.set('redirectedFrom', request.nextUrl.pathname);
-    return NextResponse.redirect(url);
-  }
-
-  // Redirect to dashboard if logged in and at login page
-  if (request.nextUrl.pathname === '/' && session) {
-    const url = request.nextUrl.clone();
-    url.pathname = '/painel';
-    return NextResponse.redirect(url);
-  }
-
+  // Simplificando o Middleware para evitar loops em iframes
+  // O AuthProvider (Cliente) será o único responsável pela proteção de rotas
   return response;
 }
 
@@ -92,7 +66,6 @@ export const config = {
      * - _next/static (static files)
      * - _next/image (image optimization files)
      * - favicon.ico (favicon file)
-     * Feel free to modify this pattern to include more paths.
      */
     '/((?!_next/static|_next/image|favicon.ico|api|registrar|public|.*\\.).*)',
   ],

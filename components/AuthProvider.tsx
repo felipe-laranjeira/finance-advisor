@@ -3,7 +3,6 @@
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { SessionManager } from './SessionManager';
 import { getCircularReplacer } from '@/lib/utils';
 
 interface AppUser {
@@ -40,14 +39,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const pathname = usePathname();
   const checkingRef = useRef(false);
 
-  const [showInactivityModal, setShowInactivityModal] = useState(false);
-  const inactivityTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const warningTimerRef = useRef<NodeJS.Timeout | null>(null);
+  useEffect(() => {
+    // LOGS DE AMBIENTE (TAREFA 4)
+    console.log('APP_INIT:', process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 10));
+  }, []);
 
-  // Define signOut and login early to avoid TDZ issues with resetTimers
+  // TRATAMENTO DE QUERY STRING (TAREFA 3)
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.location.search.includes('redirectedFrom=')) {
+      const url = new URL(window.location.href);
+      url.searchParams.delete('redirectedFrom');
+      window.history.replaceState({}, '', url.toString());
+    }
+  }, [pathname]);
+
   const signOut = useCallback(async () => {
     try {
-      setShowInactivityModal(false);
       localStorage.removeItem('app_user');
       setUser(null);
       await supabase.auth.signOut();
@@ -55,174 +62,162 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.error('Logout error:', err);
     } finally {
       if (window.location.pathname !== '/') {
-        router.push('/');
+        router.replace('/');
       }
     }
   }, [router]);
 
-  const resetTimers = useCallback(() => {
-    if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
-    if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
-
-    if (!user) return;
-
-    // 28 minutes warning (REGRA 3.1)
-    warningTimerRef.current = setTimeout(() => {
-      setShowInactivityModal(true);
-    }, 28 * 60 * 1000);
-
-    // 30 minutes absolute logout (REGRA 3.1)
-    inactivityTimerRef.current = setTimeout(() => {
-      signOut();
-    }, 30 * 60 * 1000);
-  }, [user, signOut]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'mousemove'];
-    const handleActivity = () => {
-      if (showInactivityModal) return;
-      resetTimers();
-    };
-
-    events.forEach(event => window.addEventListener(event, handleActivity));
-    resetTimers();
-
-    return () => {
-      events.forEach(event => window.removeEventListener(event, handleActivity));
-      if (warningTimerRef.current) clearTimeout(warningTimerRef.current);
-      if (inactivityTimerRef.current) clearTimeout(inactivityTimerRef.current);
-    };
-  }, [user, resetTimers, showInactivityModal]);
-
-  // Memoize login
+  // Função de Login centralizada (Memoizada)
   const login = useCallback(async (userData: AppUser) => {
-    // If a Supabase session was provided, set it in the client
-    if (userData.session && userData.session.access_token && userData.session.refresh_token) {
-      const { session } = userData;
-      try {
-        await supabase.auth.setSession({
-          access_token: session.access_token,
-          refresh_token: session.refresh_token
-        });
-        console.info('Sessão Supabase sincronizada no login.');
-      } catch (err) {
-        console.error('Erro ao sincronizar sessão no login:', err);
+    if (checkingRef.current) return; // Evita múltiplas chamadas simultâneas
+    
+    console.log('[Auth] Iniciando processo de login no cliente...');
+    setLoading(true);
+    checkingRef.current = true; // Bloqueia checkUser durante o processo de login
+    
+    try {
+      if (!userData || !userData.id) {
+        throw new Error('Dados de usuário inválidos recebidos do servidor.');
       }
-    }
 
-    localStorage.setItem('app_user', JSON.stringify(userData, getCircularReplacer()));
-    setUser(userData);
-    router.push('/painel');
+      // 1. Sincronização de Sessão Supabase
+      if (userData.session?.access_token) {
+        console.log('[Auth] Sincronizando sessão Supabase...');
+        const { error: sessionError } = await supabase.auth.setSession({
+          access_token: userData.session.access_token,
+          refresh_token: userData.session.refresh_token
+        });
+        
+        if (sessionError) {
+          console.error('[Auth] Erro ao sincronizar sessão:', sessionError.message);
+          throw new Error(`Erro na segurança: ${sessionError.message}`);
+        }
+        
+        const { data: { session: verifiedSession } } = await supabase.auth.getSession();
+        if (!verifiedSession) {
+          console.warn('[Auth] Alerta: Sessão não detectada pelo Supabase após setSession.');
+        } else {
+          console.info('[Auth] Sessão Supabase verificada e ativa.');
+        }
+      }
+
+      // 2. Persistência de estado local para hidratação rápida
+      const userToStore = { ...userData };
+      localStorage.setItem('app_user', JSON.stringify(userToStore, getCircularReplacer()));
+      
+      setUser(userData);
+      
+      // 3. Navegação
+      console.log('[Auth] Login completo. Redirecionando para /painel');
+      router.replace('/painel');
+      
+    } catch (err: any) {
+      console.error('[Auth] Erro fatal no login:', err);
+      setLoading(false);
+      checkingRef.current = false; // Libera no erro
+      
+      if (err.message?.includes('pattern') || err.name === 'InvalidCharacterError') {
+        localStorage.clear(); 
+        throw new Error('Erro de segurança (tokens inválidos). O cache foi limpo, tente novamente.');
+      }
+      throw err;
+    } finally {
+      // Nota: Não desligamos o checkingRef aqui imediatamente para permitir 
+      // que a navegação aconteça sem interferência do checkUser inicial do novo pathname
+      setTimeout(() => {
+        checkingRef.current = false;
+      }, 2000);
+    }
   }, [router]);
 
-  // Memoize updateUser
+  // Função para atualizar perfil do usuário em memória e cache
   const updateUser = useCallback((userData: Partial<AppUser>) => {
     setUser(prev => {
       if (!prev) return null;
       const updated = { ...prev, ...userData };
-      localStorage.setItem('app_user', JSON.stringify(updated, getCircularReplacer()));
+      try {
+        localStorage.setItem('app_user', JSON.stringify(updated, getCircularReplacer()));
+      } catch (e) {
+        console.error('[Auth] Erro ao atualizar cache local:', e);
+      }
       return updated;
     });
   }, []);
 
+  // Efeito principal de verificação de autenticação (CheckUser)
   useEffect(() => {
     const checkUser = async () => {
       if (checkingRef.current) return;
       
       try {
         checkingRef.current = true;
-        // Check if we already have a user in state
         const isProtectedRoute = pathname !== '/' && pathname !== '/registrar';
         
+        // 1. Hidratação rápida via Cache Local (Melhora UX inicial)
         const storedUserJson = localStorage.getItem('app_user');
-        if (!storedUserJson) {
-           setUser(null);
-           setLoading(false);
-           if (isProtectedRoute) {
-             router.push('/');
-           }
-           return;
+        let localUser: any = null;
+        if (storedUserJson && storedUserJson !== 'undefined' && storedUserJson !== 'null') {
+          try {
+            localUser = JSON.parse(storedUserJson);
+            if (!user) setUser(localUser);
+          } catch (e) {
+            console.error('[Auth] Falha no parse do cache:', e);
+          }
         }
 
-        try {
-          const parsedUser = JSON.parse(storedUserJson);
+        // 2. Validação Real com Supabase Auth
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        
+        if (sessionError) {
+          console.error('[Auth] Erro ao buscar sessão Supabase:', sessionError.message);
+        }
+        
+        // Caso não haja sessão ativa no Supabase
+        if (!session) {
+          console.info('[Auth] Nenhuma sessão ativa no Supabase.');
           
-          // Verify session integrity with Supabase
-          const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-          
-          if (sessionError) {
-            console.warn('Supabase session error:', sessionError.message);
-            if (sessionError.message.includes('refresh_token_not_found') || sessionError.message.includes('Refresh Token Not Found')) {
-              signOut();
-              return;
+          // Tentativa de restauração emergencial se tivermos tokens no cache local
+          if (localUser?.session?.access_token) {
+            console.log('[Auth] Tentando restaurar sessão via cache local...');
+            try {
+              const { error: restoreError } = await supabase.auth.setSession({
+                access_token: localUser.session.access_token,
+                refresh_token: localUser.session.refresh_token
+              });
+              
+              if (!restoreError) {
+                const { data: { session: newSession } } = await supabase.auth.getSession();
+                if (newSession) {
+                  console.log('[Auth] Sessão restaurada com sucesso.');
+                  await handleSession(newSession, localUser);
+                  return;
+                }
+              }
+            } catch (e) {
+              console.error('[Auth] Erro ao tentar restaurar sessão:', e);
             }
           }
-          
-          if (!session) {
-            // No Supabase session, but we have a stored user? Try to sync.
-            if (parsedUser.session?.access_token) {
-               const { error: restoreError } = await supabase.auth.setSession({
-                 access_token: parsedUser.session.access_token,
-                 refresh_token: parsedUser.session.refresh_token
-               });
-               if (restoreError) {
-                 signOut();
-                 return;
-               }
-            } else {
-               signOut();
-               return;
-            }
-          }
 
-          const userId = session?.user?.id || parsedUser.id;
-
-          // Optimization: If user already set and ID matches, don't re-render/re-fetch unless necessary
-          if (user && user.id === userId) {
-            setLoading(false);
-            if (pathname === '/') router.push('/painel');
-            return;
-          }
-
-          // Verify user in DB (RLS check)
-          const { data: dbUser, error: dbError } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', userId)
-            .single();
-
-          if (dbError || !dbUser) {
-            console.warn('RLS check failed or user not in DB, but session exists. Using stored profile fallback.');
-            const correctedUser = { ...parsedUser, id: userId };
-            setUser(correctedUser);
-            localStorage.setItem('app_user', JSON.stringify(correctedUser, getCircularReplacer()));
-            setLoading(false);
-            if (pathname === '/') router.push('/painel');
-            return;
-          }
-
-          if (dbUser.status !== 'Ativo') {
-            console.error('Account inactive. Status:', dbUser.status);
-            localStorage.removeItem('app_user');
+          // Se chegarmos aqui e for rota protegida sem sessão: Expulsa para login
+          if (isProtectedRoute) {
+            console.warn('[Auth] Acesso negado: Rota protegida sem sessão ativa.');
             setUser(null);
-            await signOut();
-            return;
+            localStorage.removeItem('app_user');
+            router.replace('/');
           }
+          setLoading(false);
+          return;
+        }
 
-          const finalUser = { ...dbUser, session: session || parsedUser.session };
-          setUser(finalUser);
-          localStorage.setItem('app_user', JSON.stringify(finalUser, getCircularReplacer()));
+        // Se houver sessão, validamos o perfil no banco (Regras de Negócio: Ativo/Inativo)
+        await handleSession(session, localUser);
 
-          // Redirect if at login page
-          if (pathname === '/') {
-            router.push('/painel');
-          }
-
-        } catch (err) {
-          console.error('Auth verification error:', err);
-          signOut();
+      } catch (err: any) {
+        console.error('[Auth] Erro crítico no fluxo de autenticação:', err.message);
+        // Proteção contra looping infinito por tokens inválidos
+        if (err.message?.includes('pattern') || err.name === 'InvalidCharacterError') {
+          localStorage.clear();
+          await signOut();
         }
       } finally {
         setLoading(false);
@@ -230,8 +225,68 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
     };
 
+    // Sub-rotina para processar a sessão e validar perfil
+    const handleSession = async (activeSession: any, localUser: any) => {
+      const userId = activeSession.user.id;
+      
+      // Busca dados do perfil no banco (Ponto de verdade para Status)
+      let dbUser = null;
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, name, email, status, photo_url')
+          .eq('id', userId)
+          .maybeSingle();
+          
+        if (!error && data) {
+          dbUser = data;
+        } else if (error) {
+          console.warn('[Auth] Erro DB, usando cache se compatível:', error.message);
+        }
+      } catch (e) {
+        console.warn('[Auth] Sem conexão com banco de dados.');
+      }
+
+      // Fallback para cache local se o banco falhar mas o ID coincidir
+      if (!dbUser && localUser && localUser.id === userId) {
+        dbUser = localUser;
+      }
+
+      // Auto-reparo (Self-healing): cria o perfil na public.users se o Auth for válido mas o registro faltar
+      if (!dbUser) {
+        console.log('[Auth] Perfil não encontrado no banco. Criando registro...');
+        const { data: newUser } = await supabase.from('users').upsert({
+          id: userId,
+          email: activeSession.user.email,
+          name: activeSession.user.user_metadata?.name || activeSession.user.email?.split('@')[0] || 'Usuário',
+          status: 'Ativo'
+        }).select().single();
+        dbUser = newUser;
+      }
+
+      const statusAtual = dbUser?.status || (dbUser as any)?.Status || 'Ativo';
+
+      // Validação de Conta Bloqueada
+      if (statusAtual === 'Inativo') {
+        console.error('[Auth] Acesso negado: Conta inativa.');
+        await signOut();
+        return;
+      }
+
+      // Sucesso: Sincroniza estado e cache
+      const finalUser = { ...dbUser, status: statusAtual, session: activeSession };
+      setUser(finalUser);
+      localStorage.setItem('app_user', JSON.stringify(finalUser, getCircularReplacer()));
+
+      // Redirecionamento amigável para quem está na Home mas já logado
+      if (pathname === '/' && statusAtual === 'Ativo') {
+        router.replace('/painel');
+      }
+    };
+
     checkUser();
-  }, [pathname, router, signOut]); // Removed 'user' from dependencies to avoid loop
+  }, [pathname, router, signOut]);
+
 
   useEffect(() => {
     // Synchronize logout across tabs
@@ -262,7 +317,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       
       if (session && (event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED')) {
         const stored = localStorage.getItem('app_user');
-        if (stored) {
+        if (stored && stored !== 'undefined') {
           try {
             const parsed = JSON.parse(stored);
             if (parsed.id === session.user.id) {
@@ -290,34 +345,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <AuthContext.Provider value={{ user, loading, login, signOut, updateUser }}>
-      <SessionManager />
-      {showInactivityModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="bg-white p-6 rounded-xl shadow-2xl max-w-sm w-full mx-4 border border-gray-200">
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Você ainda está aí?</h3>
-            <p className="text-gray-600 mb-6">Sua sessão irá expirar em breve por inatividade. Deseja continuar conectado?</p>
-            <div className="flex flex-col gap-3">
-              <button 
-                onClick={() => {
-                  setShowInactivityModal(false);
-                  resetTimers();
-                }}
-                className="w-full py-3 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 transition-colors"
-                id="continue-session-btn"
-              >
-                Sim, continuar
-              </button>
-              <button 
-                onClick={signOut}
-                className="w-full py-3 bg-gray-100 text-gray-700 rounded-lg font-medium hover:bg-gray-200 transition-colors"
-                id="logout-session-btn"
-              >
-                Sair agora
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
       {children}
     </AuthContext.Provider>
   );

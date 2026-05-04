@@ -17,11 +17,14 @@ export default function LoginPage() {
   const { user, loading: authLoading, login } = useAuth();
   const router = useRouter();
 
+  // Redirecionamento agora é centralizado no AuthProvider para evitar loops
+  /* 
   useEffect(() => {
     if (user) {
       router.push('/painel');
     }
   }, [user, router]);
+  */
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,6 +48,7 @@ export default function LoginPage() {
     } catch (err: any) {
       console.error('Login error:', err);
       setError(err.message || 'Ocorreu um erro inesperado.');
+    } finally {
       setLoading(false);
     }
   };
