@@ -67,66 +67,50 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
   }, [router]);
 
-  // Função de Login centralizada (Memoizada)
+  // Função de Login centralizada
   const login = useCallback(async (userData: AppUser) => {
-    if (checkingRef.current) return; // Evita múltiplas chamadas simultâneas
+    if (checkingRef.current) return;
     
-    console.log('[Auth] Iniciando processo de login no cliente...');
+    console.log('[Auth] Iniciando processo de login...');
     setLoading(true);
-    checkingRef.current = true; // Bloqueia checkUser durante o processo de login
+    checkingRef.current = true;
     
     try {
-      if (!userData || !userData.id) {
-        throw new Error('Dados de usuário inválidos recebidos do servidor.');
+      if (!userData || !userData.session?.access_token) {
+        throw new Error('Dados de autenticação inválidos.');
       }
 
-      // 1. Sincronização de Sessão Supabase
-      if (userData.session?.access_token) {
-        console.log('[Auth] Sincronizando sessão Supabase...');
-        const { error: sessionError } = await supabase.auth.setSession({
-          access_token: userData.session.access_token,
-          refresh_token: userData.session.refresh_token
-        });
-        
-        if (sessionError) {
-          console.error('[Auth] Erro ao sincronizar sessão:', sessionError.message);
-          throw new Error(`Erro na segurança: ${sessionError.message}`);
-        }
-        
-        const { data: { session: verifiedSession } } = await supabase.auth.getSession();
-        if (!verifiedSession) {
-          console.warn('[Auth] Alerta: Sessão não detectada pelo Supabase após setSession.');
-        } else {
-          console.info('[Auth] Sessão Supabase verificada e ativa.');
-        }
-      }
-
-      // 2. Persistência de estado local para hidratação rápida
-      const userToStore = { ...userData };
-      localStorage.setItem('app_user', JSON.stringify(userToStore, getCircularReplacer()));
+      // 1. Seta a sessão no cliente Supabase
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: userData.session.access_token,
+        refresh_token: userData.session.refresh_token
+      });
       
+      if (sessionError) {
+        console.error('[Auth] Erro ao sincronizar tokens:', sessionError.message);
+        // Se o token for inválido, limpa tudo
+        if (sessionError.message.includes('Refresh Token Not Found') || sessionError.status === 400) {
+          localStorage.clear();
+          throw new Error('Sessão expirada ou inválida. Por favor, tente logar novamente.');
+        }
+        throw sessionError;
+      }
+
+      // 2. Persistência de conveniência para hidratação da UI
+      localStorage.setItem('app_user', JSON.stringify(userData, getCircularReplacer()));
       setUser(userData);
       
-      // 3. Navegação
-      console.log('[Auth] Login completo. Redirecionando para /painel');
+      console.log('[Auth] Sucesso. Navegando para o painel...');
       router.replace('/painel');
       
     } catch (err: any) {
-      console.error('[Auth] Erro fatal no login:', err);
+      console.error('[Auth] Erro no login:', err.message);
       setLoading(false);
-      checkingRef.current = false; // Libera no erro
-      
-      if (err.message?.includes('pattern') || err.name === 'InvalidCharacterError') {
-        localStorage.clear(); 
-        throw new Error('Erro de segurança (tokens inválidos). O cache foi limpo, tente novamente.');
-      }
+      checkingRef.current = false;
       throw err;
     } finally {
-      // Nota: Não desligamos o checkingRef aqui imediatamente para permitir 
-      // que a navegação aconteça sem interferência do checkUser inicial do novo pathname
-      setTimeout(() => {
-        checkingRef.current = false;
-      }, 2000);
+      // Pequeno delay para garantir que o redirecionamento ocorra antes de liberar a verificação
+      setTimeout(() => { checkingRef.current = false; }, 1000);
     }
   }, [router]);
 
@@ -168,6 +152,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         // 2. Validação Real com Supabase Auth
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
+        // Trata erro de Refresh Token inválido explicitamente
+        if (sessionError?.message?.includes('Refresh Token Not Found') || sessionError?.message?.includes('invalid_grant')) {
+          console.error('[Auth] Refresh Token inválido ou expirado. Limpando tudo.');
+          localStorage.clear();
+          setUser(null);
+          if (isProtectedRoute) router.replace('/');
+          setLoading(false);
+          checkingRef.current = false;
+          return;
+        }
+
         if (sessionError) {
           console.error('[Auth] Erro ao buscar sessão Supabase:', sessionError.message);
         }
@@ -188,7 +183,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
               if (!restoreError) {
                 const { data: { session: newSession } } = await supabase.auth.getSession();
                 if (newSession) {
-                  console.log('[Auth] Sessão restaurada com sucesso.');
                   await handleSession(newSession, localUser);
                   return;
                 }

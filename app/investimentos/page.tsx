@@ -185,6 +185,13 @@ export default function InvestmentsPage() {
       updated_at: new Date().toISOString()
     };
 
+    // Find category ID for instruction mapping
+    const { data: catData } = await supabase
+      .from('investiments_categories')
+      .select('id')
+      .eq('name', data.asset_type)
+      .maybeSingle();
+
     // UPSERT logic as requested: user_id, asset_name, broker, reference_date are unique
     const { error } = await supabase
       .from('investments')
@@ -194,6 +201,18 @@ export default function InvestmentsPage() {
       console.error('Error saving investment:', error);
       alert('Erro ao salvar investimento.');
     } else {
+      // Record categorization instruction
+      if (catData?.id) {
+        await supabase
+          .from('investments_category_instruction')
+          .upsert({
+            user_id: user.id,
+            asset_name: data.asset_name,
+            category_id: catData.id,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'user_id,asset_name' });
+      }
+
       fetchAvailableMonths();
       fetchInvestments();
     }
@@ -225,6 +244,23 @@ export default function InvestmentsPage() {
       if (!apiKey) throw new Error("API Key ausente.");
 
       const ai = new GoogleGenAI({ apiKey });
+
+      // Fetch user's category instructions for learning
+      const { data: instructions } = await supabase
+        .from('investments_category_instruction')
+        .select(`
+          asset_name,
+          investiments_categories (
+            name
+          )
+        `)
+        .eq('user_id', user.id);
+
+      const instructionsText = instructions && instructions.length > 0 
+        ? `Use estas instruções de categorização personalizadas do usuário (prioridade máxima):
+           ${instructions.map((i: any) => `- Ativo: "${i.asset_name}" -> Categoria: "${i.investiments_categories?.name}"`).join('\n')}`
+        : '';
+
       const prompt = `
         ### ROLE
         Você é o "Wealth Management Architect". Analise este extrato de corretora e extraia os saldos dos ativos.
@@ -237,6 +273,12 @@ export default function InvestmentsPage() {
         4. balance: Saldo monetário atual (número).
         5. reference_date: O primeiro dia do mês referente ao extrato (formato YYYY-MM-DD).
 
+        ${instructionsText}
+
+        IMPORTANTE: 
+        - Mapeie a categoria de forma inteligente.
+        - Se o ativo for similar a alguma das instruções personalizadas acima, use a categoria indicada na instrução.
+        
         Retorne APENAS um array JSON válido.
       `;
 
