@@ -59,7 +59,7 @@ export default function RegisterPage() {
             Aguarde a ativação por um administrador para começar a usar o sistema.
           </p>
           <Link 
-            href="/"
+            href="/entrar"
             className="inline-flex items-center justify-center w-full bg-primary text-on-primary py-4 rounded-xl font-headline font-bold text-lg shadow-lg shadow-primary/20 hover:shadow-primary/40 transition-all"
           >
             Voltar para o Login
@@ -164,7 +164,7 @@ export default function RegisterPage() {
               </div>
 
               <p className="text-center text-sm text-on-surface-variant">
-                Já tem uma conta? <Link href="/" className="text-primary font-bold hover:underline">Faça login</Link>
+                Já tem uma conta? <Link href="/entrar" className="text-primary font-bold hover:underline">Faça login</Link>
               </p>
             </form>
           </motion.div>

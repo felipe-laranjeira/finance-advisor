@@ -1,0 +1,2 @@
+[functions.daily-market-snapshot]
+verify_jwt = false

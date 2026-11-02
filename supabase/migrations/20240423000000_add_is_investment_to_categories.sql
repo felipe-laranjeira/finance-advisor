@@ -11,7 +11,11 @@ INSERT INTO categories (name, is_investment) VALUES
   ('Cripto', TRUE),
   ('Tesouro Direto', TRUE),
   ('Reserva de Emergência', TRUE)
-ON CONFLICT (name) DO UPDATE SET is_investment = EXCLUDED.is_investment;
+ON CONFLICT DO NOTHING;
+
+UPDATE categories
+SET is_investment = TRUE
+WHERE name IN ('Ações', 'FIIs', 'Cripto', 'Tesouro Direto', 'Reserva de Emergência');
 
 -- Mark consumption categories explicitly (though they default to false, this is for clarity)
 UPDATE categories SET is_investment = FALSE WHERE name NOT IN (
