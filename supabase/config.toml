@@ -1,2 +1,5 @@
 [functions.daily-market-snapshot]
 verify_jwt = false
+
+[functions.fundamentals-snapshot]
+verify_jwt = false
