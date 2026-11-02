@@ -47,18 +47,30 @@ BEGIN
 
     -- 3. Clear existing policies to avoid conflicts
     -- USERS
+    DROP POLICY IF EXISTS "Allow all operations for users" ON public.users;
     DROP POLICY IF EXISTS "Users can view their own data" ON public.users;
     DROP POLICY IF EXISTS "Users can update their own data" ON public.users;
     DROP POLICY IF EXISTS "Anyone can insert users during registration" ON public.users;
     
     -- TRANSACTIONS
+    DROP POLICY IF EXISTS "Allow all operations for expense transactions" ON public.expense_transactions;
+    DROP POLICY IF EXISTS "Allow all operations for investment transactions" ON public.investment_transactions;
+    DROP POLICY IF EXISTS "Allow all operations for transactions" ON public.expense_transactions;
+    DROP POLICY IF EXISTS "Allow all operations for transactions" ON public.investment_transactions;
     DROP POLICY IF EXISTS "Users can manage their own expense transactions" ON public.expense_transactions;
     DROP POLICY IF EXISTS "Users can manage their own investment transactions" ON public.investment_transactions;
     DROP POLICY IF EXISTS "Users can manage their own incoming" ON public.incoming;
     
     -- BUDGETS
+    DROP POLICY IF EXISTS "Allow all operations for expense budgets" ON public.expense_budgets;
+    DROP POLICY IF EXISTS "Allow all operations for investment budgets" ON public.investment_budgets;
+    DROP POLICY IF EXISTS "Allow all operations for budgets" ON public.expense_budgets;
+    DROP POLICY IF EXISTS "Allow all operations for budgets" ON public.investment_budgets;
     DROP POLICY IF EXISTS "Users can manage their own expense budgets" ON public.expense_budgets;
     DROP POLICY IF EXISTS "Users can manage their own investment budgets" ON public.investment_budgets;
+
+    -- INCOMING
+    DROP POLICY IF EXISTS "Allow all operations for incoming" ON public.incoming;
     
     -- CATEGORIES (Static)
     DROP POLICY IF EXISTS "Public read for transactions_categories" ON public.transactions_categories;
@@ -66,10 +78,13 @@ BEGIN
     DROP POLICY IF EXISTS "Public read for incoming_categories" ON public.incoming_categories;
     
     -- INSTRUCTIONS
+    DROP POLICY IF EXISTS "Allow all operations for instructions" ON public.transactions_category_instruction;
+    DROP POLICY IF EXISTS "Allow all operations for incoming instructions" ON public.incoming_category_instruction;
     DROP POLICY IF EXISTS "Users can manage their own transactions instructions" ON public.transactions_category_instruction;
     DROP POLICY IF EXISTS "Users can manage their own incoming instructions" ON public.incoming_category_instruction;
     
     -- INVESTMENTS
+    DROP POLICY IF EXISTS "Allow all operations for investments" ON public.investments;
     DROP POLICY IF EXISTS "Users can manage their own investments" ON public.investments;
 
     -- 4. Create New Robust Policies

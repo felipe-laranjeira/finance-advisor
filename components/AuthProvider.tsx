@@ -135,7 +135,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       
       try {
         checkingRef.current = true;
-        const isProtectedRoute = pathname !== '/' && pathname !== '/registrar';
+        const isPublicRoute = ['/', '/entrar', '/registrar'].includes(pathname);
         
         // 1. Hidratação rápida via Cache Local (Melhora UX inicial)
         const storedUserJson = localStorage.getItem('app_user');
@@ -157,7 +157,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           console.error('[Auth] Refresh Token inválido ou expirado. Limpando tudo.');
           localStorage.clear();
           setUser(null);
-          if (isProtectedRoute) router.replace('/');
+          if (!isPublicRoute) router.replace('/entrar');
           setLoading(false);
           checkingRef.current = false;
           return;
@@ -193,11 +193,11 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           }
 
           // Se chegarmos aqui e for rota protegida sem sessão: Expulsa para login
-          if (isProtectedRoute) {
+          if (!isPublicRoute) {
             console.warn('[Auth] Acesso negado: Rota protegida sem sessão ativa.');
             setUser(null);
             localStorage.removeItem('app_user');
-            router.replace('/');
+            router.replace('/entrar');
           }
           setLoading(false);
           return;
@@ -273,7 +273,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       localStorage.setItem('app_user', JSON.stringify(finalUser, getCircularReplacer()));
 
       // Redirecionamento amigável para quem está na Home mas já logado
-      if (pathname === '/' && statusAtual === 'Ativo') {
+      if (pathname === '/entrar' && statusAtual === 'Ativo') {
         router.replace('/painel');
       }
     };
@@ -288,8 +288,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (e.key === 'app_user' && e.newValue === null) {
         console.info('Logout detectado em outra aba. Sincronizando...');
         setUser(null);
-        if (pathname !== '/' && pathname !== '/registrar') {
-          router.push('/');
+        if (pathname !== '/' && pathname !== '/entrar' && pathname !== '/registrar') {
+          router.push('/entrar');
         }
       }
     };
@@ -304,8 +304,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (event === 'SIGNED_OUT') {
         localStorage.removeItem('app_user');
         setUser(null);
-        if (pathname !== '/' && pathname !== '/registrar') {
-          router.push('/');
+        if (pathname !== '/' && pathname !== '/entrar' && pathname !== '/registrar') {
+          router.push('/entrar');
         }
       }
       

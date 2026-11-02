@@ -27,7 +27,7 @@ export function BottomNavbar() {
   const pathname = usePathname();
 
   // Hide Navbar on Login (/) and Registration (/registrar) pages
-  const hidePaths = ['/', '/registrar'];
+  const hidePaths = ['/', '/entrar', '/registrar'];
   if (hidePaths.includes(pathname)) {
     return null;
   }
