@@ -1,3 +1,10 @@
+import {
+  constantTimeEqual,
+  databaseRequest as requestDatabase,
+  jsonResponse,
+  readMarketRuntimeConfig,
+} from '../_shared/market.ts';
+
 declare const Deno: {
   env: {
     get(name: string): string | undefined;
@@ -24,26 +31,6 @@ type BrapiResponse = {
 
 const jobName = 'daily-market-snapshot';
 const timezone = 'America/Sao_Paulo';
-
-function jsonResponse(body: Record<string, unknown>, status = 200): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { 'Content-Type': 'application/json; charset=utf-8' },
-  });
-}
-
-function constantTimeEqual(left: string, right: string): boolean {
-  const leftBytes = new TextEncoder().encode(left);
-  const rightBytes = new TextEncoder().encode(right);
-  let difference = leftBytes.length ^ rightBytes.length;
-  const length = Math.max(leftBytes.length, rightBytes.length);
-
-  for (let index = 0; index < length; index += 1) {
-    difference |= (leftBytes[index] ?? 0) ^ (rightBytes[index] ?? 0);
-  }
-
-  return difference === 0;
-}
 
 function getMarketDate(date: Date): { date: string; year: number; weekday: string } {
   const parts = new Intl.DateTimeFormat('en-CA', {
@@ -81,46 +68,14 @@ function timestampOrNull(value: unknown): string | null {
 }
 
 function getRuntimeConfig() {
-  const supabaseUrl = Deno.env.get('SUPABASE_URL');
-  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
-  const brapiApiKey = Deno.env.get('BRAPI_API_KEY');
-  const jobSecret = Deno.env.get('MARKET_JOB_SECRET');
-
-  if (!supabaseUrl || !serviceRoleKey || !brapiApiKey || !jobSecret) {
-    throw new Error('Missing required Edge Function secrets or Supabase runtime configuration.');
-  }
-
-  return {
-    supabaseUrl: supabaseUrl.replace(/\/+$/, ''),
-    serviceRoleKey,
-    brapiApiKey,
-    jobSecret,
-  };
+  return readMarketRuntimeConfig((name) => Deno.env.get(name));
 }
 
-async function databaseRequest<T>(
+const databaseRequest = <T>(
   config: ReturnType<typeof getRuntimeConfig>,
   path: string,
   init: RequestInit = {},
-): Promise<T> {
-  const response = await fetch(`${config.supabaseUrl}/rest/v1/${path}`, {
-    ...init,
-    headers: {
-      apikey: config.serviceRoleKey,
-      Authorization: `Bearer ${config.serviceRoleKey}`,
-      'Content-Type': 'application/json',
-      ...init.headers,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`Supabase request failed with status ${response.status}.`);
-  }
-
-  const responseBody = await response.text();
-  if (!responseBody) return undefined as T;
-  return JSON.parse(responseBody) as T;
-}
+): Promise<T> => requestDatabase<T>(config, path, init);
 
 async function saveJobRun(
   config: ReturnType<typeof getRuntimeConfig>,
@@ -204,7 +159,7 @@ async function runSnapshot(config: ReturnType<typeof getRuntimeConfig>): Promise
         quoteUrl.searchParams.set('symbols', symbol);
 
         const response = await fetch(quoteUrl, {
-          headers: { Authorization: config.brapiApiKey },
+          headers: { Authorization: `Bearer ${config.brapiApiKey}` },
         });
 
         if (!response.ok) {
