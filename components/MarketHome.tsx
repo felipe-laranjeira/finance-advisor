@@ -13,7 +13,18 @@ import {
 } from 'lucide-react';
 import type { MarketMetric, MarketStock } from '@/lib/market/public-stocks';
 import { reasonLabel } from '@/lib/market/public-stocks';
-import type { ValuationStatus } from '@/lib/valuation';
+import StockLogo from '@/components/StockLogo';
+import {
+  formatCompactCurrency,
+  formatCurrency,
+  formatDate,
+  formatPercent,
+  formatQuarter,
+  formatRatio,
+  formatTimestamp,
+  formatValuationStatus as statusLabel,
+  valuationStatusStyle as statusStyle,
+} from '@/lib/market/format';
 
 type MarketHomeProps = {
   stocks: MarketStock[];
@@ -80,94 +91,6 @@ const columns: ColumnDefinition[] = [
 ];
 
 const defaultColumns = columns.map((column) => column.key);
-const currency = new Intl.NumberFormat('pt-BR', {
-  style: 'currency',
-  currency: 'BRL',
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
-});
-const compactCurrency = new Intl.NumberFormat('pt-BR', {
-  style: 'currency',
-  currency: 'BRL',
-  notation: 'compact',
-  maximumFractionDigits: 1,
-});
-const decimal = new Intl.NumberFormat('pt-BR', { maximumFractionDigits: 2 });
-const percentage = new Intl.NumberFormat('pt-BR', {
-  minimumFractionDigits: 1,
-  maximumFractionDigits: 1,
-});
-
-function formatCurrency(value: number | null) {
-  return value === null ? '—' : currency.format(value);
-}
-
-function formatCompactCurrency(value: number | null) {
-  return value === null ? '—' : compactCurrency.format(value);
-}
-
-function formatRatio(value: number | null) {
-  return value === null ? '—' : decimal.format(value);
-}
-
-function formatPercent(value: number | null) {
-  return value === null ? '—' : `${percentage.format(value * 100)}%`;
-}
-
-function formatTimestamp(value: string | null) {
-  if (!value) return '—';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '—';
-
-  return new Intl.DateTimeFormat('pt-BR', {
-    dateStyle: 'short',
-    timeStyle: 'short',
-    timeZone: 'America/Sao_Paulo',
-  }).format(date);
-}
-
-function formatDate(value: string | null) {
-  if (!value) return '—';
-  const date = new Date(`${value.slice(0, 10)}T12:00:00Z`);
-  if (Number.isNaN(date.getTime())) return '—';
-
-  return new Intl.DateTimeFormat('pt-BR', {
-    dateStyle: 'short',
-    timeZone: 'America/Sao_Paulo',
-  }).format(date);
-}
-
-function formatQuarter(value: string | null) {
-  if (!value || !/^\d{4}-\d{2}/.test(value)) return '—';
-  const [year, month] = value.slice(0, 7).split('-').map(Number);
-  return `T${Math.ceil(month / 3)}/${year}`;
-}
-
-function statusLabel(status: ValuationStatus) {
-  switch (status) {
-    case 'below_ceiling':
-      return 'Abaixo do teto';
-    case 'between_ceiling_and_fair':
-      return 'Entre teto e justo';
-    case 'above_fair':
-      return 'Acima do justo';
-    case 'not_applicable':
-      return 'Não aplicável';
-  }
-}
-
-function statusStyle(status: ValuationStatus) {
-  switch (status) {
-    case 'below_ceiling':
-      return 'bg-emerald-50 text-emerald-800';
-    case 'between_ceiling_and_fair':
-      return 'bg-amber-50 text-amber-800';
-    case 'above_fair':
-      return 'bg-rose-50 text-rose-800';
-    case 'not_applicable':
-      return 'bg-slate-100 text-slate-700';
-  }
-}
 
 function getValue(stock: MarketStock, key: ColumnKey): string | number | null {
   switch (key) {
@@ -234,9 +157,18 @@ function getCellTitle(stock: MarketStock, column: ColumnDefinition): string | un
   return undefined;
 }
 
-function renderCell(stock: MarketStock, column: ColumnDefinition) {
+function renderCell(stock: MarketStock, column: ColumnDefinition, detailHref: string) {
   if (column.key === 'ticker') {
-    return <span className="font-bold text-[#1d4ed8]">{stock.ticker}</span>;
+    return (
+      <a
+        className="inline-flex items-center gap-2 rounded-sm font-bold text-[#1d4ed8] underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1d4ed8]"
+        href={detailHref}
+        aria-label={`Ver análise de ${stock.ticker}, ${stock.company}`}
+      >
+        <StockLogo logoUrl={stock.logoUrl} ticker={stock.ticker} />
+        {stock.ticker}
+      </a>
+    );
   }
   if (column.key === 'company') return <span className="font-medium text-[#0b1b3f]">{stock.company}</span>;
   if (column.key === 'sector') return <span>{stock.sector}</span>;
@@ -345,12 +277,36 @@ function MarketHome({ stocks, loadError }: MarketHomeProps) {
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(defaultColumns);
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const [listStateReady, setListStateReady] = useState(false);
 
   useEffect(() => {
     try {
-      const saved = window.localStorage.getItem('market-home-columns');
+      const params = new URLSearchParams(window.location.search);
+      setQuery(params.get('q') ?? '');
+      setSector(params.get('sector') ?? 'Todos os setores');
+
+      const yieldParam = params.get('yield');
+      if (yieldParam === 'Acima de 5%' || yieldParam === 'Acima de 8%') {
+        setYieldFilter(yieldParam);
+      }
+
+      const statusParam = params.get('status');
+      if (
+        statusParam &&
+        ['Abaixo do teto', 'Entre teto e justo', 'Acima do justo', 'Não aplicável'].includes(statusParam)
+      ) {
+        setStatusFilter(statusParam);
+      }
+
+      const sortParam = params.get('sort');
+      if (sortParam && columns.some((column) => column.key === sortParam)) {
+        setSortKey(sortParam as ColumnKey);
+      }
+      if (params.get('direction') === 'desc') setSortDirection('desc');
+
+      const saved = params.get('cols') ?? window.localStorage.getItem('market-home-columns');
       if (!saved) return;
-      const parsed: unknown = JSON.parse(saved);
+      const parsed: unknown = params.has('cols') ? saved.split(',') : JSON.parse(saved);
       if (
         Array.isArray(parsed) &&
         parsed.every((key): key is ColumnKey => columns.some((column) => column.key === key)) &&
@@ -359,9 +315,36 @@ function MarketHome({ stocks, loadError }: MarketHomeProps) {
         setVisibleColumns(parsed);
       }
     } catch (error) {
-      console.error('Não foi possível carregar as colunas salvas.', error);
+      console.error('Não foi possível carregar o estado salvo da lista.', error);
+    } finally {
+      setListStateReady(true);
     }
   }, []);
+
+  const listQuery = useMemo(() => {
+    const params = new URLSearchParams();
+    if (query) params.set('q', query);
+    if (sector !== 'Todos os setores') params.set('sector', sector);
+    if (yieldFilter !== 'Todos') params.set('yield', yieldFilter);
+    if (statusFilter !== 'Todas') params.set('status', statusFilter);
+    if (sortKey !== 'ticker') params.set('sort', sortKey);
+    if (sortDirection !== 'asc') params.set('direction', sortDirection);
+    if (visibleColumns.length !== defaultColumns.length) {
+      params.set('cols', visibleColumns.join(','));
+    }
+    return params.toString();
+  }, [query, sector, yieldFilter, statusFilter, sortKey, sortDirection, visibleColumns]);
+
+  useEffect(() => {
+    if (!listStateReady) return;
+    const nextUrl = `${window.location.pathname}${listQuery ? `?${listQuery}` : ''}${window.location.hash}`;
+    window.history.replaceState(window.history.state, '', nextUrl);
+    try {
+      window.localStorage.setItem('market-home-columns', JSON.stringify(visibleColumns));
+    } catch (error) {
+      console.error('Não foi possível salvar as colunas escolhidas.', error);
+    }
+  }, [listQuery, listStateReady, visibleColumns]);
 
   const sectors = useMemo(
     () => ['Todos os setores', ...new Set(stocks.map((stock) => stock.sector))],
@@ -418,13 +401,12 @@ function MarketHome({ stocks, loadError }: MarketHomeProps) {
       const next = current.includes(key)
         ? current.filter((column) => column !== key)
         : [...current, key];
-      try {
-        window.localStorage.setItem('market-home-columns', JSON.stringify(next));
-      } catch (error) {
-        console.error('Não foi possível salvar as colunas escolhidas.', error);
-      }
       return next;
     });
+  }
+
+  function detailHref(ticker: string) {
+    return `/acoes/${ticker}${listQuery ? `?${listQuery}` : ''}`;
   }
 
   function sortBy(key: ColumnKey) {
@@ -669,7 +651,7 @@ function MarketHome({ stocks, loadError }: MarketHomeProps) {
                               className={`whitespace-nowrap px-3 py-3.5 ${column.key === 'ticker' ? 'sticky left-0 z-[1] bg-white font-semibold' : ''}`}
                               title={getCellTitle(stock, column)}
                             >
-                              {renderCell(stock, column)}
+                              {renderCell(stock, column, detailHref(stock.ticker))}
                             </td>
                           ))}
                         </tr>
@@ -683,7 +665,14 @@ function MarketHome({ stocks, loadError }: MarketHomeProps) {
                     <li key={stock.ticker} className="rounded-xl border border-[#e7eef9] bg-white p-4">
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <p className="font-extrabold text-[#1d4ed8]">{stock.ticker}</p>
+                          <a
+                            href={detailHref(stock.ticker)}
+                            className="inline-flex items-center gap-2 rounded-sm font-extrabold text-[#1d4ed8] underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1d4ed8]"
+                            aria-label={`Ver análise de ${stock.ticker}, ${stock.company}`}
+                          >
+                            <StockLogo logoUrl={stock.logoUrl} ticker={stock.ticker} />
+                            {stock.ticker}
+                          </a>
                           <p className="mt-0.5 text-sm font-medium">{stock.company}</p>
                           <p className="text-xs text-slate-500">{stock.sector}</p>
                         </div>
@@ -703,7 +692,9 @@ function MarketHome({ stocks, loadError }: MarketHomeProps) {
                           .map((column) => (
                             <div key={column.key} title={getCellTitle(stock, column)}>
                               <dt className="text-xs text-slate-500">{column.shortLabel}</dt>
-                              <dd className="mt-0.5 font-semibold">{renderCell(stock, column)}</dd>
+                              <dd className="mt-0.5 font-semibold">
+                                {renderCell(stock, column, detailHref(stock.ticker))}
+                              </dd>
                             </div>
                           ))}
                       </dl>

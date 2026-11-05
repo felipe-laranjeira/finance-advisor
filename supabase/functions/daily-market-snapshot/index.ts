@@ -14,6 +14,7 @@ declare const Deno: {
 
 type TickerRow = {
   symbol: string;
+  company_id: string;
 };
 
 type BrapiQuote = {
@@ -22,6 +23,7 @@ type BrapiQuote = {
   data?: {
     regularMarketPrice?: number;
     regularMarketTime?: string;
+    logourl?: string | null;
   };
 };
 
@@ -139,7 +141,7 @@ async function runSnapshot(config: ReturnType<typeof getRuntimeConfig>): Promise
   try {
     const tickers = await databaseRequest<TickerRow[]>(
       config,
-      'tickers?select=symbol&is_active=eq.true&exchange=eq.B3&order=display_order.asc,symbol.asc',
+      'tickers?select=symbol,company_id&is_active=eq.true&exchange=eq.B3&order=display_order.asc,symbol.asc',
     );
 
     if (tickers.length === 0) {
@@ -150,7 +152,7 @@ async function runSnapshot(config: ReturnType<typeof getRuntimeConfig>): Promise
     let requestCount = 0;
     const failures: string[] = [];
 
-    for (const { symbol } of tickers) {
+    for (const { symbol, company_id } of tickers) {
       requestCount += 1;
       const fetchedAt = new Date().toISOString();
 
@@ -209,6 +211,28 @@ async function runSnapshot(config: ReturnType<typeof getRuntimeConfig>): Promise
           });
         }
 
+        if (quote.data.logourl) {
+          try {
+            const logoUrl = new URL(quote.data.logourl);
+            if (logoUrl.protocol !== 'https:' || logoUrl.hostname !== 'icons.brapi.dev') {
+              throw new Error('brapi returned a logo URL outside the approved host.');
+            }
+
+            await databaseRequest<void>(
+              config,
+              `companies?id=eq.${encodeURIComponent(company_id)}`,
+              {
+                method: 'PATCH',
+                headers: { Prefer: 'return=minimal' },
+                body: JSON.stringify({ logo_url: logoUrl.toString() }),
+              },
+            );
+          } catch (error) {
+            const detail = error instanceof Error ? error.message : 'Unexpected logo update error.';
+            failures.push(`${symbol} logo: ${detail}`);
+          }
+        }
+
         succeededCount += 1;
       } catch (error) {
         const detail = error instanceof Error ? error.message : 'Unexpected ticker processing error.';
@@ -218,7 +242,11 @@ async function runSnapshot(config: ReturnType<typeof getRuntimeConfig>): Promise
     }
 
     const status =
-      succeededCount === tickers.length ? 'succeeded' : succeededCount > 0 ? 'partial' : 'failed';
+      failures.length === 0 && succeededCount === tickers.length
+        ? 'succeeded'
+        : succeededCount > 0
+          ? 'partial'
+          : 'failed';
     const detail = failures.length > 0 ? failures.join('; ').slice(0, 4000) : null;
 
     await saveJobRun(config, runId, {

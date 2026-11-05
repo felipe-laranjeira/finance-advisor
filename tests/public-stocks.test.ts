@@ -33,6 +33,9 @@ const companies: CompanyRecord[] = symbols.map((symbol) => ({
   id: symbol,
   name: `${symbol} S.A.`,
   sector: symbol === 'ITUB4' ? 'Financeiro' : 'Indústria',
+  logo_url: typeof record(responseData(symbol, 'quote')).logourl === 'string'
+    ? String(record(responseData(symbol, 'quote')).logourl)
+    : null,
 }));
 
 function fixture(ticker: string, endpoint: string): FixturePayload {
@@ -181,10 +184,37 @@ test('maps each discovered ticker to real metrics or an explicit unavailable rea
   assert.equal(bank?.netDebtToEbitda, null);
   assert.deepEqual(bank?.reasons.netDebtToEbitda, ['not_applicable']);
 
+  const petr4Stock = stocks.find((stock) => stock.ticker === 'PETR4');
+  assert.equal(petr4Stock?.logoUrl, 'https://icons.brapi.dev/icons/PETR4.svg');
+
   const deniedTicker = stocks.find((stock) => stock.ticker === 'WEGE3');
   assert.equal(deniedTicker?.roe, null);
   assert.equal(deniedTicker?.pe, null);
   assert.equal(deniedTicker?.status, 'not_applicable');
+});
+
+test('keeps absent quote and fundamentals unavailable rather than estimating them', () => {
+  const [stock] = buildPublicStocks(
+    [{
+      symbol: 'TEST3',
+      company_id: 'TEST3',
+      financial_institution_type: 'none',
+    }],
+    [{ id: 'TEST3', name: 'Test S.A.', sector: 'Indústria', logo_url: null }],
+    [],
+    [],
+    [],
+    [],
+    '2026-11-02',
+  );
+
+  assert.equal(stock.logoUrl, null);
+  assert.equal(stock.price, null);
+  assert.equal(stock.ceiling, null);
+  assert.equal(stock.fairPrice, null);
+  assert.ok(stock.reasons.price?.length);
+  assert.ok(stock.reasons.ceiling?.length);
+  assert.ok(stock.reasons.fairPrice?.length);
 });
 
 test('marks dividend formulas unavailable when brapi denies the dividends endpoint', () => {

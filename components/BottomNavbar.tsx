@@ -26,9 +26,13 @@ const navItems = [
 export function BottomNavbar() {
   const pathname = usePathname();
 
-  // Hide Navbar on Login (/) and Registration (/registrar) pages
+  // Keep the public market pages separate from the signed-in navigation.
   const hidePaths = ['/', '/entrar', '/registrar'];
-  if (hidePaths.includes(pathname)) {
+  if (
+    hidePaths.includes(pathname) ||
+    pathname === '/acoes' ||
+    pathname.startsWith('/acoes/')
+  ) {
     return null;
   }
 

@@ -1,0 +1,2 @@
+ALTER TABLE public.companies
+  ADD COLUMN logo_url TEXT;
