@@ -25,6 +25,7 @@ export type CompanyRecord = {
   id: string;
   name: string;
   sector: string;
+  logo_url?: string | null;
 };
 
 export type PriceRecord = {
@@ -89,6 +90,7 @@ export type MarketStock = {
   ticker: string;
   company: string;
   sector: string;
+  logoUrl: string | null;
   financialInstitutionType: TickerRecord['financial_institution_type'];
   price: number | null;
   quoteAt: string | null;
@@ -109,6 +111,7 @@ export type MarketStock = {
   fairMarginOfSafety: number | null;
   ceilingWindow: FormulaResult<number>['windowUsed'];
   annualPeriodEnd: string | null;
+  annualFinancialPeriodEnd: string | null;
   ttmPeriodEnd: string | null;
   fundamentalsFetchedAt: string | null;
   fundamentalsAreStale: boolean;
@@ -254,6 +257,7 @@ export function buildPublicStocks(
       ticker: ticker.symbol,
       company: company?.name ?? ticker.symbol,
       sector: company?.sector ?? 'Setor não informado',
+      logoUrl: company?.logo_url ?? null,
       financialInstitutionType: ticker.financial_institution_type,
       price,
       quoteAt: quote?.quote_at ?? null,
@@ -274,6 +278,7 @@ export function buildPublicStocks(
       fairMarginOfSafety: fairSafety.value,
       ceilingWindow: ceilingResult.windowUsed,
       annualPeriodEnd: hasAnnualPair ? annual?.fiscal_year_end ?? null : null,
+      annualFinancialPeriodEnd: annual?.fiscal_year_end ?? null,
       ttmPeriodEnd: current?.reference_period_end ?? null,
       fundamentalsFetchedAt: current?.fetched_at ?? null,
       fundamentalsAreStale: current?.is_stale ?? true,

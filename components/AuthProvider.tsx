@@ -22,6 +22,14 @@ interface AuthContextType {
   updateUser: (userData: Partial<AppUser>) => void;
 }
 
+function isPublicRoutePath(pathname: string): boolean {
+  return (
+    ['/', '/entrar', '/registrar'].includes(pathname) ||
+    pathname === '/acoes' ||
+    pathname.startsWith('/acoes/')
+  );
+}
+
 const AuthContext = createContext<AuthContextType>({
   user: null,
   loading: true,
@@ -135,7 +143,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       
       try {
         checkingRef.current = true;
-        const isPublicRoute = ['/', '/entrar', '/registrar'].includes(pathname);
+        const isPublicRoute = isPublicRoutePath(pathname);
         
         // 1. Hidratação rápida via Cache Local (Melhora UX inicial)
         const storedUserJson = localStorage.getItem('app_user');
@@ -288,7 +296,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (e.key === 'app_user' && e.newValue === null) {
         console.info('Logout detectado em outra aba. Sincronizando...');
         setUser(null);
-        if (pathname !== '/' && pathname !== '/entrar' && pathname !== '/registrar') {
+        if (!isPublicRoutePath(pathname)) {
           router.push('/entrar');
         }
       }
@@ -304,7 +312,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (event === 'SIGNED_OUT') {
         localStorage.removeItem('app_user');
         setUser(null);
-        if (pathname !== '/' && pathname !== '/entrar' && pathname !== '/registrar') {
+        if (!isPublicRoutePath(pathname)) {
           router.push('/entrar');
         }
       }

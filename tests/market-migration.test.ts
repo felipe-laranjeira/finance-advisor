@@ -7,6 +7,10 @@ const migration = readFileSync(
   join(process.cwd(), 'supabase', 'migrations', '20261101000000_create_stock_fundamentals.sql'),
   'utf8',
 );
+const logoMigration = readFileSync(
+  join(process.cwd(), 'supabase', 'migrations', '20261104000000_add_company_logo_url.sql'),
+  'utf8',
+);
 
 test('fundamental tables grant public reads but reserve writes for service_role', () => {
   for (const table of ['fundamentals_latest', 'financials_annual', 'dividends_history']) {
@@ -30,4 +34,9 @@ test('fundamental tables grant public reads but reserve writes for service_role'
     migration,
     /CREATE POLICY[\s\S]*?FOR (?:INSERT|UPDATE|DELETE)[\s\S]*?TO (?:anon|authenticated)/,
   );
+});
+
+test('adds only a nullable company logo URL without granting visitor writes', () => {
+  assert.match(logoMigration, /ALTER TABLE public\.companies\s+ADD COLUMN logo_url TEXT/);
+  assert.doesNotMatch(logoMigration, /NOT NULL|GRANT|POLICY/i);
 });

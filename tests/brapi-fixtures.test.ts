@@ -55,6 +55,7 @@ test('fixtures expose the selected source fields for the table', () => {
 
   assert.equal(typeof quote.regularMarketPrice, 'number');
   assert.equal(typeof quote.regularMarketTime, 'string');
+  assert.match(String(quote.logourl), /^https:\/\/icons\.brapi\.dev\/icons\/PETR4\.svg$/);
   assert.equal(typeof statistics.trailingEps, 'number');
   assert.equal(typeof statistics.bookValue, 'number');
   assert.equal(typeof financialData.returnOnEquity, 'number');
