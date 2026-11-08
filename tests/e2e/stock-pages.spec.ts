@@ -13,6 +13,7 @@ test.beforeEach(async ({ page }) => {
 
 test('opens a stock page and restores list filters, sorting, and visible columns', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('[data-market-home-ready="true"]')).toBeAttached();
   await page.getByPlaceholder('Buscar ticker ou empresa').fill('PETR4');
   await page.getByRole('button', { name: 'Ordenar por Preço', exact: true }).click();
   await page.getByRole('button', { name: 'Colunas' }).click();
@@ -38,6 +39,7 @@ test('opens a stock page and restores list filters, sorting, and visible columns
 
 test('activates the ticker link with the keyboard', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' });
+  await expect(page.locator('[data-market-home-ready="true"]')).toBeAttached();
   const tickerLink = page.getByRole('link', { name: 'Ver análise de PETR4, Petróleo Brasileiro S.A.' });
   await tickerLink.focus();
   await expect(tickerLink).toBeFocused();

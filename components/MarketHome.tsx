@@ -11,104 +11,45 @@ import {
   SlidersHorizontal,
   TrendingUp,
 } from 'lucide-react';
-import type { MarketMetric, MarketStock } from '@/lib/market/public-stocks';
+import type { MarketStock } from '@/lib/market/public-stocks';
 import { reasonLabel } from '@/lib/market/public-stocks';
 import StockLogo from '@/components/StockLogo';
 import {
-  formatCompactCurrency,
-  formatCurrency,
   formatDate,
   formatPercent,
   formatQuarter,
-  formatRatio,
   formatTimestamp,
   formatValuationStatus as statusLabel,
   valuationStatusStyle as statusStyle,
 } from '@/lib/market/format';
+import {
+  compareMarketColumnValues,
+  DEFAULT_MARKET_COLUMNS,
+  isDefaultMarketColumnSelection,
+  MARKET_COLUMNS,
+  migrateLegacyColumnPreference,
+  type MarketColumnDefinition,
+  type MarketColumnId,
+} from '@/lib/market/columns';
 
 type MarketHomeProps = {
   stocks: MarketStock[];
   loadError: string | null;
+  initialListState: {
+    query: string;
+    sector: string;
+    yieldFilter: string;
+    statusFilter: string;
+    sortKey: MarketColumnId;
+    sortDirection: 'asc' | 'desc';
+    visibleColumns: MarketColumnId[];
+  };
 };
 
-type ColumnKey =
-  | 'ticker'
-  | 'company'
-  | 'sector'
-  | 'price'
-  | 'revenue'
-  | 'operatingExpenses'
-  | 'netIncome'
-  | 'netMargin'
-  | 'pe'
-  | 'pb'
-  | 'dividendYield'
-  | 'roe'
-  | 'netDebtToEbitda'
-  | 'ceiling'
-  | 'fairPrice'
-  | 'status';
+const columns = MARKET_COLUMNS;
 
-type ColumnDefinition = {
-  key: ColumnKey;
-  label: string;
-  shortLabel: string;
-  metric?: MarketMetric;
-};
-
-const columns: ColumnDefinition[] = [
-  { key: 'ticker', label: 'Ticker', shortLabel: 'Ticker' },
-  { key: 'company', label: 'Empresa', shortLabel: 'Empresa' },
-  { key: 'sector', label: 'Setor', shortLabel: 'Setor' },
-  { key: 'price', label: 'Preço', shortLabel: 'Preço', metric: 'price' },
-  { key: 'revenue', label: 'Receita', shortLabel: 'Receita', metric: 'revenue' },
-  {
-    key: 'operatingExpenses',
-    label: 'Despesas operacionais',
-    shortLabel: 'Despesas',
-    metric: 'operatingExpenses',
-  },
-  { key: 'netIncome', label: 'Lucro líquido', shortLabel: 'Lucro', metric: 'netIncome' },
-  { key: 'netMargin', label: 'Margem líquida', shortLabel: 'Margem', metric: 'netMargin' },
-  { key: 'pe', label: 'P/L', shortLabel: 'P/L', metric: 'pe' },
-  { key: 'pb', label: 'P/VP', shortLabel: 'P/VP', metric: 'pb' },
-  {
-    key: 'dividendYield',
-    label: 'Dividend yield',
-    shortLabel: 'Div. yield',
-    metric: 'dividendYield',
-  },
-  { key: 'roe', label: 'ROE', shortLabel: 'ROE', metric: 'roe' },
-  {
-    key: 'netDebtToEbitda',
-    label: 'Dívida líquida/EBITDA',
-    shortLabel: 'Dívida/EBITDA',
-    metric: 'netDebtToEbitda',
-  },
-  { key: 'ceiling', label: 'Preço teto', shortLabel: 'Preço teto', metric: 'ceiling' },
-  { key: 'fairPrice', label: 'Preço justo', shortLabel: 'Preço justo', metric: 'fairPrice' },
-  { key: 'status', label: 'Situação', shortLabel: 'Situação' },
-];
-
-const defaultColumns = columns.map((column) => column.key);
-
-function getValue(stock: MarketStock, key: ColumnKey): string | number | null {
-  switch (key) {
-    case 'ticker':
-      return stock.ticker;
-    case 'company':
-      return stock.company;
-    case 'sector':
-      return stock.sector;
-    case 'status':
-      return statusLabel(stock.status);
-    default:
-      return stock[key];
-  }
-}
-
-function getCellTitle(stock: MarketStock, column: ColumnDefinition): string | undefined {
-  if (column.key === 'status') {
+function getCellTitle(stock: MarketStock, column: MarketColumnDefinition): string | undefined {
+  if (column.id === 'status') {
     if (stock.statusReasons.length > 0) {
       return stock.statusReasons.map(reasonLabel).join('; ');
     }
@@ -117,7 +58,7 @@ function getCellTitle(stock: MarketStock, column: ColumnDefinition): string | un
       : undefined;
   }
 
-  if (column.key === 'ceiling') {
+  if (column.id === 'ceiling') {
     const safety = formatPercent(stock.ceilingMarginOfSafety);
     const window =
       stock.ceilingWindow === 'avg_5_full_calendar_years'
@@ -136,7 +77,7 @@ function getCellTitle(stock: MarketStock, column: ColumnDefinition): string | un
       .join(' · ');
   }
 
-  if (column.key === 'fairPrice') {
+  if (column.id === 'fairPrice') {
     return [
       stock.formulas.fairPrice,
       'Graham: raiz de (22,5 × LPA × VPA)',
@@ -157,8 +98,8 @@ function getCellTitle(stock: MarketStock, column: ColumnDefinition): string | un
   return undefined;
 }
 
-function renderCell(stock: MarketStock, column: ColumnDefinition, detailHref: string) {
-  if (column.key === 'ticker') {
+function renderCell(stock: MarketStock, column: MarketColumnDefinition, detailHref: string) {
+  if (column.id === 'ticker') {
     return (
       <a
         className="inline-flex items-center gap-2 rounded-sm font-bold text-[#1d4ed8] underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1d4ed8]"
@@ -170,9 +111,8 @@ function renderCell(stock: MarketStock, column: ColumnDefinition, detailHref: st
       </a>
     );
   }
-  if (column.key === 'company') return <span className="font-medium text-[#0b1b3f]">{stock.company}</span>;
-  if (column.key === 'sector') return <span>{stock.sector}</span>;
-  if (column.key === 'status') {
+  if (column.id === 'company') return <span className="font-medium text-[#0b1b3f]">{stock.company}</span>;
+  if (column.id === 'status') {
     return (
       <span className={`inline-flex max-w-40 rounded-full px-2.5 py-1 text-xs font-semibold ${statusStyle(stock.status)}`}>
         {statusLabel(stock.status)}
@@ -180,32 +120,8 @@ function renderCell(stock: MarketStock, column: ColumnDefinition, detailHref: st
     );
   }
 
-  const value = getValue(stock, column.key);
-  let formatted: string;
-  switch (column.key) {
-    case 'price':
-    case 'ceiling':
-    case 'fairPrice':
-      formatted = formatCurrency(typeof value === 'number' ? value : null);
-      break;
-    case 'revenue':
-    case 'operatingExpenses':
-    case 'netIncome':
-      formatted = formatCompactCurrency(typeof value === 'number' ? value : null);
-      break;
-    case 'netMargin':
-    case 'dividendYield':
-    case 'roe':
-      formatted = formatPercent(typeof value === 'number' ? value : null);
-      break;
-    case 'pe':
-    case 'pb':
-    case 'netDebtToEbitda':
-      formatted = formatRatio(typeof value === 'number' ? value : null);
-      break;
-    default:
-      formatted = typeof value === 'string' ? value : '—';
-  }
+  const value = column.getValue(stock);
+  const formatted = column.format(value);
 
   return (
     <span
@@ -217,105 +133,40 @@ function renderCell(stock: MarketStock, column: ColumnDefinition, detailHref: st
   );
 }
 
-function metricValue(stock: MarketStock, key: ColumnKey): number | null {
-  switch (key) {
-    case 'price':
-      return stock.price;
-    case 'revenue':
-      return stock.revenue;
-    case 'operatingExpenses':
-      return stock.operatingExpenses;
-    case 'netIncome':
-      return stock.netIncome;
-    case 'netMargin':
-      return stock.netMargin;
-    case 'pe':
-      return stock.pe;
-    case 'pb':
-      return stock.pb;
-    case 'dividendYield':
-      return stock.dividendYield;
-    case 'roe':
-      return stock.roe;
-    case 'netDebtToEbitda':
-      return stock.netDebtToEbitda;
-    case 'ceiling':
-      return stock.ceiling;
-    case 'fairPrice':
-      return stock.fairPrice;
-    default:
-      return null;
-  }
-}
-
 function compareStocks(
   first: MarketStock,
   second: MarketStock,
-  key: ColumnKey,
+  key: MarketColumnId,
   direction: 'asc' | 'desc',
 ) {
-  const firstMetric = metricValue(first, key);
-  const secondMetric = metricValue(second, key);
-  if (firstMetric === null && secondMetric !== null) return 1;
-  if (secondMetric === null && firstMetric !== null) return -1;
-
-  const firstValue = getValue(first, key);
-  const secondValue = getValue(second, key);
-  const comparison =
-    typeof firstValue === 'number' && typeof secondValue === 'number'
-      ? firstValue - secondValue
-      : String(firstValue ?? '').localeCompare(String(secondValue ?? ''), 'pt-BR');
-  return comparison * (direction === 'asc' ? 1 : -1);
+  const column = columns.find((item) => item.id === key);
+  if (!column) return 0;
+  return compareMarketColumnValues(
+    column.getValue(first),
+    column.getValue(second),
+    direction,
+  );
 }
 
-function MarketHome({ stocks, loadError }: MarketHomeProps) {
-  const [query, setQuery] = useState('');
-  const [sector, setSector] = useState('Todos os setores');
-  const [yieldFilter, setYieldFilter] = useState('Todos');
-  const [statusFilter, setStatusFilter] = useState('Todas');
-  const [sortKey, setSortKey] = useState<ColumnKey>('ticker');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [visibleColumns, setVisibleColumns] = useState<ColumnKey[]>(defaultColumns);
+function MarketHome({ stocks, loadError, initialListState }: MarketHomeProps) {
+  const [query, setQuery] = useState(initialListState.query);
+  const [sector, setSector] = useState(initialListState.sector);
+  const [yieldFilter, setYieldFilter] = useState(initialListState.yieldFilter);
+  const [statusFilter, setStatusFilter] = useState(initialListState.statusFilter);
+  const [sortKey, setSortKey] = useState<MarketColumnId>(initialListState.sortKey);
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>(initialListState.sortDirection);
+  const [visibleColumns, setVisibleColumns] = useState<MarketColumnId[]>(
+    initialListState.visibleColumns,
+  );
   const [columnsOpen, setColumnsOpen] = useState(false);
+  const [helpColumn, setHelpColumn] = useState<MarketColumnId | null>(null);
   const [listStateReady, setListStateReady] = useState(false);
 
   useEffect(() => {
     try {
-      const params = new URLSearchParams(window.location.search);
-      setQuery(params.get('q') ?? '');
-      setSector(params.get('sector') ?? 'Todos os setores');
-
-      const yieldParam = params.get('yield');
-      if (yieldParam === 'Acima de 5%' || yieldParam === 'Acima de 8%') {
-        setYieldFilter(yieldParam);
-      }
-
-      const statusParam = params.get('status');
-      if (
-        statusParam &&
-        ['Abaixo do teto', 'Entre teto e justo', 'Acima do justo', 'Não aplicável'].includes(statusParam)
-      ) {
-        setStatusFilter(statusParam);
-      }
-
-      const sortParam = params.get('sort');
-      if (sortParam && columns.some((column) => column.key === sortParam)) {
-        setSortKey(sortParam as ColumnKey);
-      }
-      if (params.get('direction') === 'desc') setSortDirection('desc');
-
-      const saved = params.get('cols') ?? window.localStorage.getItem('market-home-columns');
-      if (!saved) return;
-      const parsed: unknown = params.has('cols') ? saved.split(',') : JSON.parse(saved);
-      if (
-        Array.isArray(parsed) &&
-        parsed.every((key): key is ColumnKey => columns.some((column) => column.key === key)) &&
-        parsed.includes('ticker')
-      ) {
-        setVisibleColumns(parsed);
-      }
+      migrateLegacyColumnPreference(window.localStorage);
     } catch (error) {
-      console.error('Não foi possível carregar o estado salvo da lista.', error);
+      console.error('Não foi possível migrar a preferência local de colunas.', error);
     } finally {
       setListStateReady(true);
     }
@@ -329,7 +180,7 @@ function MarketHome({ stocks, loadError }: MarketHomeProps) {
     if (statusFilter !== 'Todas') params.set('status', statusFilter);
     if (sortKey !== 'ticker') params.set('sort', sortKey);
     if (sortDirection !== 'asc') params.set('direction', sortDirection);
-    if (visibleColumns.length !== defaultColumns.length) {
+    if (!isDefaultMarketColumnSelection(visibleColumns)) {
       params.set('cols', visibleColumns.join(','));
     }
     return params.toString();
@@ -339,12 +190,7 @@ function MarketHome({ stocks, loadError }: MarketHomeProps) {
     if (!listStateReady) return;
     const nextUrl = `${window.location.pathname}${listQuery ? `?${listQuery}` : ''}${window.location.hash}`;
     window.history.replaceState(window.history.state, '', nextUrl);
-    try {
-      window.localStorage.setItem('market-home-columns', JSON.stringify(visibleColumns));
-    } catch (error) {
-      console.error('Não foi possível salvar as colunas escolhidas.', error);
-    }
-  }, [listQuery, listStateReady, visibleColumns]);
+  }, [listQuery, listStateReady]);
 
   const sectors = useMemo(
     () => ['Todos os setores', ...new Set(stocks.map((stock) => stock.sector))],
@@ -396,12 +242,15 @@ function MarketHome({ stocks, loadError }: MarketHomeProps) {
   const hasStaleFundamentals = stocks.some((stock) => stock.fundamentalsAreStale);
   const availableQuoteCount = stocks.filter((stock) => stock.price !== null).length;
 
-  function toggleColumn(key: ColumnKey) {
+  function toggleColumn(key: MarketColumnId) {
+    if (key === 'ticker' || key === 'status') return;
     setVisibleColumns((current) => {
-      const next = current.includes(key)
-        ? current.filter((column) => column !== key)
-        : [...current, key];
-      return next;
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return columns
+        .filter((column) => next.has(column.id))
+        .map((column) => column.id);
     });
   }
 
@@ -409,7 +258,7 @@ function MarketHome({ stocks, loadError }: MarketHomeProps) {
     return `/acoes/${ticker}${listQuery ? `?${listQuery}` : ''}`;
   }
 
-  function sortBy(key: ColumnKey) {
+  function sortBy(key: MarketColumnId) {
     if (sortKey === key) {
       setSortDirection((direction) => (direction === 'asc' ? 'desc' : 'asc'));
     } else {
@@ -425,8 +274,36 @@ function MarketHome({ stocks, loadError }: MarketHomeProps) {
     setStatusFilter('Todas');
   }
 
+  const visibleColumnDefinitions = columns.filter((column) =>
+    visibleColumns.includes(column.id),
+  );
+  const mobilePrimaryColumns = columns
+    .filter((column) =>
+      column.mobilePriority !== null &&
+      !['ticker', 'company', 'status'].includes(column.id),
+    )
+    .sort((first, second) =>
+      (first.mobilePriority ?? Number.MAX_SAFE_INTEGER) -
+      (second.mobilePriority ?? Number.MAX_SAFE_INTEGER),
+    );
+  const mobileOptionalColumns = columns.filter((column) =>
+    column.optional && visibleColumns.includes(column.id),
+  );
+  const visibleColumnWidthTotal = visibleColumnDefinitions.reduce(
+    (total, column) => total + column.width,
+    0,
+  );
+  const hasManyOptionalColumns = mobileOptionalColumns.length >= 3;
+  const tableWidthBasis = hasManyOptionalColumns
+    ? Math.max(1400, visibleColumnWidthTotal)
+    : visibleColumnWidthTotal;
+  const statusColumn = columns.find((column) => column.id === 'status');
+
   return (
-    <div className="-mb-20 min-h-screen bg-[#f1f6ff] text-[#0b1b3f] lg:mb-0">
+    <div
+      className="-mb-20 min-h-screen bg-[#f1f6ff] text-[#0b1b3f] lg:mb-0"
+      data-market-home-ready={listStateReady ? 'true' : 'false'}
+    >
       <header className="sticky top-0 z-30 border-b border-[#dce6f7] bg-white/95 backdrop-blur">
         <div className="mx-auto flex h-[72px] max-w-[1440px] items-center justify-between px-4 sm:px-6 lg:px-10">
           <Link href="/" className="flex items-center gap-2.5" aria-label="Financial Advisor, página inicial">
@@ -468,7 +345,7 @@ function MarketHome({ stocks, loadError }: MarketHomeProps) {
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-600 sm:text-base">
               Consulte dados armazenados e fórmulas transparentes. Valores ausentes ou não aplicáveis
-              aparecem como traço, com o motivo disponível ao passar o cursor.
+              aparecem como traço, com o motivo disponível nas dicas acessíveis.
             </p>
           </div>
 
@@ -520,7 +397,7 @@ function MarketHome({ stocks, loadError }: MarketHomeProps) {
                 Preços e fundamentos lidos do Supabase; indicadores derivados no servidor.
               </p>
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-600">
               Última atualização das cotações: {formatTimestamp(latestQuoteUpdate)}
             </p>
           </div>
@@ -573,23 +450,40 @@ function MarketHome({ stocks, loadError }: MarketHomeProps) {
               </label>
               <div className="relative">
                 <button
-                  className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[#dce6f7] px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 lg:w-auto"
+                  className="flex h-11 w-full items-center justify-center gap-2 rounded-lg border border-[#dce6f7] px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1d4ed8] lg:w-auto"
                   type="button"
+                  aria-controls="market-column-options"
                   aria-expanded={columnsOpen}
                   onClick={() => setColumnsOpen((open) => !open)}
                 >
                   <SlidersHorizontal size={16} aria-hidden="true" /> Colunas
                 </button>
                 {columnsOpen ? (
-                  <div className="absolute right-0 top-12 z-20 max-h-80 w-60 overflow-y-auto rounded-xl border border-[#dce6f7] bg-white p-2 shadow-xl">
+                  <div
+                    id="market-column-options"
+                    role="group"
+                    aria-label="Colunas visíveis"
+                    className="absolute right-0 top-12 z-20 max-h-80 w-64 overflow-y-auto rounded-xl border border-[#dce6f7] bg-white p-2 shadow-xl"
+                  >
+                    <button
+                      className="mb-1 w-full rounded-lg px-2 py-2 text-left text-sm font-semibold text-[#1d4ed8] hover:bg-blue-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#1d4ed8] disabled:cursor-not-allowed disabled:text-slate-400"
+                      type="button"
+                      disabled={isDefaultMarketColumnSelection(visibleColumns)}
+                      onClick={() => setVisibleColumns([...DEFAULT_MARKET_COLUMNS])}
+                    >
+                      Restaurar padrão
+                    </button>
                     {columns.map((column) => (
-                      <label key={column.key} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm hover:bg-blue-50">
+                      <label
+                        key={column.id}
+                        className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-2 text-sm hover:bg-blue-50"
+                      >
                         <input
-                          className="accent-[#1d4ed8]"
+                          className="accent-[#1d4ed8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1d4ed8]"
                           type="checkbox"
-                          checked={visibleColumns.includes(column.key)}
-                          disabled={column.key === 'ticker'}
-                          onChange={() => toggleColumn(column.key)}
+                          checked={visibleColumns.includes(column.id)}
+                          disabled={column.id === 'ticker' || column.id === 'status'}
+                          onChange={() => toggleColumn(column.id)}
                         />
                         {column.label}
                       </label>
@@ -613,31 +507,100 @@ function MarketHome({ stocks, loadError }: MarketHomeProps) {
             ) : (
               <>
                 <div className="mt-5 hidden overflow-x-auto lg:block">
-                  <table className="min-w-full text-left text-sm">
+                  <table
+                    className={`w-full table-fixed text-sm ${
+                      hasManyOptionalColumns ? 'min-w-[1400px]' : ''
+                    }`}
+                  >
                     <caption className="sr-only">Indicadores fundamentalistas das ações configuradas</caption>
+                    <colgroup>
+                      {visibleColumnDefinitions.map((column) => (
+                        <col
+                          key={column.id}
+                          style={{ width: `${(column.width / tableWidthBasis) * 100}%` }}
+                        />
+                      ))}
+                    </colgroup>
                     <thead>
                       <tr className="border-b border-slate-100 text-xs font-bold uppercase tracking-wide text-slate-500">
-                        {columns.filter((column) => visibleColumns.includes(column.key)).map((column) => (
+                        {visibleColumnDefinitions.map((column) => (
                           <th
-                            key={column.key}
-                            className={`whitespace-nowrap px-3 py-3 ${column.key === 'ticker' ? 'sticky left-0 z-[2] bg-white' : ''}`}
+                            key={column.id}
+                            aria-sort={
+                              sortKey === column.id
+                                ? sortDirection === 'asc'
+                                  ? 'ascending'
+                                  : 'descending'
+                                : 'none'
+                            }
+                            className={`px-2 py-3 ${
+                              column.alignment === 'right' ? 'text-right' : 'text-left'
+                            } ${
+                              column.id === 'ticker'
+                                ? 'sticky left-0 z-[2] bg-white'
+                                : ''
+                            } ${
+                              ['ceiling', 'fairPrice', 'status'].includes(column.id)
+                                ? 'bg-blue-50 font-extrabold text-[#0b1b3f]'
+                                : ''
+                            }`}
                             scope="col"
                           >
-                            <button
-                              className="inline-flex items-center gap-1.5 hover:text-[#1d4ed8]"
-                              type="button"
-                              aria-label={`Ordenar por ${column.label}`}
-                              onClick={() => sortBy(column.key)}
+                            <div
+                              className={`flex items-center gap-1 ${
+                                column.alignment === 'right' ? 'justify-end' : ''
+                              }`}
                             >
-                              {column.label}
-                              {sortKey === column.key ? (
-                                sortDirection === 'asc'
-                                  ? <ArrowUp size={13} aria-hidden="true" />
-                                  : <ArrowDown size={13} aria-hidden="true" />
-                              ) : (
-                                <ArrowDownUp size={13} className="opacity-35" aria-hidden="true" />
-                              )}
-                            </button>
+                              <button
+                                className="inline-flex items-center gap-1 rounded-sm text-left hover:text-[#1d4ed8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1d4ed8]"
+                                type="button"
+                                aria-label={`Ordenar por ${column.label}`}
+                                onClick={() => sortBy(column.id)}
+                              >
+                                <span>{column.label}</span>
+                                {sortKey === column.id ? (
+                                  sortDirection === 'asc'
+                                    ? <ArrowUp size={13} aria-hidden="true" />
+                                    : <ArrowDown size={13} aria-hidden="true" />
+                                ) : (
+                                  <ArrowDownUp size={13} className="shrink-0 opacity-35" aria-hidden="true" />
+                                )}
+                              </button>
+                              <div className="relative shrink-0 text-left normal-case tracking-normal">
+                                <button
+                                  className="flex h-5 w-5 items-center justify-center rounded-full border border-slate-300 text-[11px] font-bold text-slate-600 hover:border-[#1d4ed8] hover:text-[#1d4ed8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1d4ed8]"
+                                  type="button"
+                                  aria-label={`Sobre ${column.label}`}
+                                  aria-expanded={helpColumn === column.id}
+                                  aria-controls={
+                                    helpColumn === column.id
+                                      ? `market-column-help-${column.id}`
+                                      : undefined
+                                  }
+                                  aria-describedby={
+                                    helpColumn === column.id
+                                      ? `market-column-help-${column.id}`
+                                      : undefined
+                                  }
+                                  onClick={() =>
+                                    setHelpColumn((current) =>
+                                      current === column.id ? null : column.id,
+                                    )
+                                  }
+                                >
+                                  i
+                                </button>
+                                {helpColumn === column.id ? (
+                                  <span
+                                    id={`market-column-help-${column.id}`}
+                                    className="absolute right-0 top-6 z-20 w-56 rounded-lg border border-[#dce6f7] bg-white p-3 text-xs font-medium normal-case leading-5 text-[#0b1b3f] shadow-lg"
+                                    role="tooltip"
+                                  >
+                                    {column.description}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
                           </th>
                         ))}
                       </tr>
@@ -645,10 +608,20 @@ function MarketHome({ stocks, loadError }: MarketHomeProps) {
                     <tbody className="divide-y divide-slate-100">
                       {filteredStocks.map((stock) => (
                         <tr className="transition hover:bg-blue-50/50" key={stock.ticker}>
-                          {columns.filter((column) => visibleColumns.includes(column.key)).map((column) => (
+                          {visibleColumnDefinitions.map((column) => (
                             <td
-                              key={column.key}
-                              className={`whitespace-nowrap px-3 py-3.5 ${column.key === 'ticker' ? 'sticky left-0 z-[1] bg-white font-semibold' : ''}`}
+                              key={column.id}
+                              className={`break-words px-2 py-3.5 ${
+                                column.alignment === 'right' ? 'text-right tabular-nums' : 'text-left'
+                              } ${
+                                column.id === 'ticker'
+                                  ? 'sticky left-0 z-[1] bg-white font-semibold'
+                                  : ''
+                              } ${
+                                ['ceiling', 'fairPrice', 'status'].includes(column.id)
+                                  ? 'bg-blue-50/50 font-semibold'
+                                  : ''
+                              }`}
                               title={getCellTitle(stock, column)}
                             >
                               {renderCell(stock, column, detailHref(stock.ticker))}
@@ -674,30 +647,49 @@ function MarketHome({ stocks, loadError }: MarketHomeProps) {
                             {stock.ticker}
                           </a>
                           <p className="mt-0.5 text-sm font-medium">{stock.company}</p>
-                          <p className="text-xs text-slate-500">{stock.sector}</p>
                         </div>
                         <span
                           className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${statusStyle(stock.status)}`}
-                          title={stock.statusReasons.map(reasonLabel).join('; ')}
+                          title={statusColumn ? getCellTitle(stock, statusColumn) : undefined}
                         >
                           {statusLabel(stock.status)}
                         </span>
                       </div>
                       <dl className="mt-4 grid grid-cols-2 gap-3 border-y border-slate-100 py-3 text-sm">
-                        {columns
-                          .filter((column) =>
-                            visibleColumns.includes(column.key) &&
-                            !['ticker', 'company', 'sector', 'status'].includes(column.key),
-                          )
-                          .map((column) => (
-                            <div key={column.key} title={getCellTitle(stock, column)}>
-                              <dt className="text-xs text-slate-500">{column.shortLabel}</dt>
-                              <dd className="mt-0.5 font-semibold">
-                                {renderCell(stock, column, detailHref(stock.ticker))}
-                              </dd>
-                            </div>
-                          ))}
+                        {mobilePrimaryColumns.map((column) => (
+                          <div key={column.id} title={getCellTitle(stock, column)}>
+                            <dt className="text-xs text-slate-500">{column.shortLabel}</dt>
+                            <dd
+                              className={`mt-0.5 font-semibold ${
+                                column.alignment === 'right' ? 'tabular-nums' : ''
+                              }`}
+                            >
+                              {column.format(column.getValue(stock))}
+                            </dd>
+                          </div>
+                        ))}
                       </dl>
+                      {mobileOptionalColumns.length > 0 ? (
+                        <details className="mt-3 rounded-lg bg-slate-50 px-3 py-2">
+                          <summary className="cursor-pointer rounded-sm text-sm font-semibold text-[#1d4ed8] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#1d4ed8]">
+                            Outras colunas selecionadas ({mobileOptionalColumns.length})
+                          </summary>
+                          <dl className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                            {mobileOptionalColumns.map((column) => (
+                              <div key={column.id} title={getCellTitle(stock, column)}>
+                                <dt className="text-xs text-slate-500">{column.shortLabel}</dt>
+                                <dd
+                                  className={`mt-0.5 font-semibold ${
+                                    column.alignment === 'right' ? 'tabular-nums' : ''
+                                  }`}
+                                >
+                                  {column.format(column.getValue(stock))}
+                                </dd>
+                              </div>
+                            ))}
+                          </dl>
+                        </details>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
