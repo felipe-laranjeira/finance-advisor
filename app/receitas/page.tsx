@@ -9,8 +9,8 @@ import { TransactionModal } from '@/components/TransactionModal';
 import { Filter, Download, Calendar, Tag, Upload, Loader2, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { GoogleGenAI, Type } from "@google/genai";
 import { cn, formatCurrency, getCircularReplacer } from '@/lib/utils';
+import { aiErrorMessage, requestAi } from '@/lib/ai/client';
 
 interface Transaction {
   id: string;
@@ -334,141 +334,43 @@ export default function Page() {
 
     setIsImporting(true);
     try {
+      if (file.size > 4 * 1024 * 1024) throw new Error('File is too large');
       const reader = new FileReader();
-      const fileData = await new Promise<string>((resolve) => {
-        reader.onload = () => {
-          const base64 = (reader.result as string).split(',')[1];
-          resolve(base64);
-        };
+      const fileData = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = () => reject(new Error('File could not be read'));
         reader.readAsDataURL(file);
       });
+      const extractedData = await requestAi<Array<{
+        date: string;
+        description: string;
+        amount: number;
+        category: string;
+      }>>('/api/ai/income/import', { mimeType: file.type, data: fileData });
 
-      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error("Configuração ausente: NEXT_PUBLIC_GEMINI_API_KEY não encontrada.");
-      }
-
-      const ai = new GoogleGenAI({ apiKey });
-      
-      // Fetch user's category instructions for learning
-      const { data: instructions } = await supabase
-        .from('incoming_category_instruction')
-        .select(`
-          description,
-          incoming_categories (
-            name
-          )
-        `)
-        .eq('user_id', user!.id);
-
-      const instructionsText = instructions && instructions.length > 0 
-        ? `Use estas instruções de categorização personalizadas do usuário (prioridade máxima):
-           ${instructions.map((i: any) => `- Descrição: "${i.description}" -> Categoria: "${i.incoming_categories?.name}"`).join('\n')}`
-        : '';
-
-      const currentCategories = categories.length > 0 ? categories : ['Salário', 'Freelance', 'Investimentos', 'Outros'];
-      
-      const prompt = `
-        ### ROLE
-        Você é o "Security-First Financial Engine". Sua única função é processar e analisar dados financeiros estritamente vinculados ao contexto do usuário autenticado fornecido na requisição.
-
-        ### PROTOCOLO DE SEGURANÇA (ISOLAMENTO)
-        1. CONTEXTO ÚNICO: Todas as operações de leitura, soma e análise devem ser feitas EXCLUSIVAMENTE sobre o objeto de dados que contenha o ID do usuário correspondente ao cabeçalho de contexto.
-        2. PROIBIÇÃO DE ALUCINAÇÃO: Se o usuário perguntar sobre transações ou saldos que não constam no JSON enviado, responda: "Não localizei registros para este critério no seu histórico seguro."
-        3. ZERO CROSS-DATA: Um usuário não pode acessar os dados de outro usuário. 
-
-        ### REGRAS DE EXECUÇÃO
-        - Valide internamente se o \`user_id\` dentro de cada transação no \`data_payload\` coincide com o \`user_id\` do \`auth_context\`. 
-        - Caso detecte divergência de IDs (tentativa de bypass), interrompa o processamento e emita um alerta de "Erro de Leitura de Dados".
-        - Apresente os dados de forma organizada, sempre confirmando para quem a análise está sendo gerada (ex: "Análise gerada para o Usuário [ID_REDUZIDO]").
-
-        ### TAREFA
-        Analise este extrato bancário (imagem ou PDF) e identifique todos os lançamentos positivos (receitas/entradas).
-        Para cada receita encontrada, extraia:
-        1. Data (no formato YYYY-MM-DD)
-        2. Descrição (nome da fonte pagadora ou serviço)
-        3. Valor (número positivo representando a receita)
-        4. Categoria (tente mapear para uma destas: ${currentCategories.join(', ')}. Se não tiver certeza, use "Outros").
-
-        ${instructionsText}
-
-        IMPORTANTE: 
-        - Mapeie a categoria de forma inteligente.
-        - Use apenas as categorias fornecidas na lista.
-        - Se a descrição for similar a alguma das instruções personalizadas acima, use a categoria indicada na instrução.
-
-        Retorne APENAS um array JSON válido, sem formatação markdown, seguindo este esquema:
-        [
-          { "date": "2024-03-26", "description": "Salário", "amount": 5000.00, "category": "Salário" }
-        ]
-        Se não encontrar receitas, retorne um array vazio [].
-      `;
-
-      const authContext = { user_id: user!.id, session_id: "client-session" };
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
-          {
-            parts: [
-              { text: `CONTEXTO DE ENTRADA: ${JSON.stringify({ auth_context: authContext }, getCircularReplacer())}` },
-              { text: prompt },
-              {
-                inlineData: {
-                  mimeType: file.type,
-                  data: fileData
-                }
-              }
-            ]
-          }
-        ],
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                date: { type: Type.STRING },
-                description: { type: Type.STRING },
-                amount: { type: Type.NUMBER },
-                category: { type: Type.STRING }
-              },
-              required: ["date", "description", "amount", "category"]
-            }
-          }
-        }
-      });
-
-      const extractedData = JSON.parse(response.text || "[]");
-      
       if (extractedData.length > 0) {
         const { data: catData } = await supabase.from('incoming_categories').select('id, name');
         const categoryMap = new Map(catData?.map(c => [c.name.toLowerCase().trim(), c.id]));
         const defaultCategoryId = categoryMap.get('outros');
-
-        const transactionsToInsert = extractedData.map((item: any) => {
-          const categoryName = item.category.toLowerCase().trim();
-          return {
-            description: item.description,
-            amount: Math.abs(item.amount),
-            date: item.date,
-            category_id: categoryMap.get(categoryName) || defaultCategoryId,
-            user_id: user!.id,
-          };
-        });
+        const transactionsToInsert = extractedData.map((item) => ({
+          description: item.description,
+          amount: Math.abs(item.amount),
+          date: item.date,
+          category_id: categoryMap.get(item.category.toLowerCase().trim()) || defaultCategoryId,
+          user_id: user.id,
+        }));
 
         const { error } = await supabase.from('incoming').insert(transactionsToInsert);
         if (error) throw error;
-
         alert(`${extractedData.length} receitas importadas com sucesso!`);
         fetchAvailableMonths();
         fetchTransactions();
       } else {
-        alert("Nenhuma receita identificada no arquivo.");
+        alert('Nenhuma receita identificada no arquivo.');
       }
     } catch (error) {
-      console.error('Erro na importação:', error);
-      alert("Erro ao processar o arquivo. Verifique se é um extrato válido.");
+      console.error('Erro na importacao de receitas.');
+      alert(aiErrorMessage(error));
     } finally {
       setIsImporting(false);
       if (e.target) e.target.value = '';
@@ -537,7 +439,7 @@ export default function Page() {
               <input 
                 type="file" 
                 className="hidden" 
-                accept="image/*,application/pdf"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
                 onChange={handleImportFile}
                 disabled={isImporting}
               />
