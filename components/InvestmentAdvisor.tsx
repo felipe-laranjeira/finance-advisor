@@ -2,92 +2,29 @@
 
 import React, { useState } from 'react';
 import { Sparkles, Shield, Zap, TrendingUp, AlertTriangle, Loader2, ChevronRight } from 'lucide-react';
-import { GoogleGenAI } from "@google/genai";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '@/lib/utils';
-
-interface Investment {
-  asset_name: string;
-  broker: string;
-  asset_type: string;
-  balance: number;
-  reference_date: string;
-}
-
-interface InvestmentAdvisorProps {
-  investments: Investment[];
-  userId: string;
-}
+import { aiErrorMessage, requestAi } from '@/lib/ai/client';
 
 type RiskProfile = 'Conservador' | 'Moderado' | 'Arrojado';
 
-export function InvestmentAdvisor({ investments, userId }: InvestmentAdvisorProps) {
+export function InvestmentAdvisor({ investmentIds }: { investmentIds: string[] }) {
   const [profile, setProfile] = useState<RiskProfile>('Moderado');
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [loadingAI, setLoadingAI] = useState(false);
 
   const handleRunAIAnalysis = async () => {
-    if (loadingAI) return; // Evita cliques duplos
-    
+    if (loadingAI) return;
+
     setLoadingAI(true);
     setAnalysis(null);
-
     try {
-      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("API Key ausente.");
-
-      const ai = new GoogleGenAI({ apiKey });
-      
-      const portfolioSummary = investments.map(i => 
-        `- ${i.asset_name} (${i.asset_type}) na ${i.broker}: R$ ${i.balance.toLocaleString('pt-BR')}`
-      ).join('\n');
-
-      const prompt = `
-        ### PERSONA
-        Você é o "Alpha Investment Advisor", um especialista sênior em alocação de ativos e mercado financeiro brasileiro. Seu tom é profissional, analítico e pedagógico.
-
-        ### OBJETIVO
-        Analisar a carteira de investimentos do usuário (ID: ${userId}) e fornecer recomendações baseadas no perfil de risco selecionado: ${profile}.
-
-        ### DADOS DA CARTEIRA ATUAL
-        ${portfolioSummary || 'O usuário ainda não possui ativos cadastrados.'}
-
-        ### CONTEXTO DE MERCADO 
-        - Taxa Selic: Use a ferramenta de busca para encontrar a taxa Selic atual no Brasil.
-        - Poupança: Rendimento de 0,5% am + TR (sempre inferior a CDBs de 100% CDI).
-        - Inflação (IPCA): Considere a meta de aprox. 4% a.a.
-
-        ### REGRAS DE ANÁLISE POR PERFIL
-        1. CONSERVADOR: Foco em liquidez e preservação de capital. Prioridade: Tesouro Selic, CDBs 100% CDI, LCI/LCA. Recomendar saída de Poupança para CDB de bancão.
-        2. MODERADO: Equilíbrio. Aceita até 20-30% em Renda Variável (FIIs e Ações de Dividendos). 
-        3. ARROJADO: Foco em crescimento. Aceita maior exposição a Ações, ETFs internacionais e Small Caps.
-
-        ### FORMATO DE SAÍDA (Markdown)
-        Sua resposta deve ser estruturada em 4 seções:
-        1. **Diagnóstico da Carteira**: Resumo da diversificação atual.
-        2. **Ações Recomendadas**: Lista clara com [COMPRA], [VENDA] ou [TROCA]. 
-        3. **Observações de Risco**: Um aviso sobre volatilidade e reserva de emergência.
-        4. **Cenário atual do mercado**: Taxa selic atual e principais indicadores economicos.
-
-        ### RESTRIÇÕES DE SEGURANÇA
-        - Nunca peça dados sensíveis.
-        - Inclua sempre o Disclaimer: "Esta é uma análise baseada em IA e não constitui recomendação de compra oficial. Consulte um assessor CVM."
-      `;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [{ parts: [{ text: prompt }] }],
-        config: {
-          tools: [{ googleSearch: {} }]
-        }
-      });
-
-      setAnalysis(response.text || "Não foi possível gerar a análise.");
+      const result = await requestAi<string>('/api/ai/investments/advisor', { profile, investmentIds });
+      setAnalysis(result);
     } catch (error) {
-      console.error('Erro ao gerar análise:', error);
-      setAnalysis("Ocorreu um erro ao processar sua solicitação. Por favor, tente novamente.");
+      setAnalysis(aiErrorMessage(error));
     } finally {
       setLoadingAI(false);
     }

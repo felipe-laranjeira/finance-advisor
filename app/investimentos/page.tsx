@@ -9,8 +9,8 @@ import { InvestmentTable } from '@/components/InvestmentTable';
 import { InvestmentModal } from '@/components/InvestmentModal';
 import { Filter, Download, Calendar, Upload, Loader2, ChevronLeft, ChevronRight, TrendingUp, DollarSign } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { GoogleGenAI, Type } from "@google/genai";
 import { cn, formatCurrency } from '@/lib/utils';
+import { aiErrorMessage, requestAi } from '@/lib/ai/client';
 import { useAuth } from '@/components/AuthProvider';
 import { useLayout } from '@/components/LayoutProvider';
 
@@ -234,108 +234,40 @@ export default function InvestmentsPage() {
 
     setIsImporting(true);
     try {
+      if (file.size > 4 * 1024 * 1024) throw new Error('File is too large');
       const reader = new FileReader();
-      const fileData = await new Promise<string>((resolve) => {
+      const fileData = await new Promise<string>((resolve, reject) => {
         reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = () => reject(new Error('File could not be read'));
         reader.readAsDataURL(file);
       });
+      const extracted = await requestAi<Array<{
+        asset_name: string;
+        broker: string;
+        asset_type: string;
+        balance: number;
+        reference_date: string;
+      }>>('/api/ai/investments/import', { mimeType: file.type, data: fileData });
 
-      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-      if (!apiKey) throw new Error("API Key ausente.");
-
-      const ai = new GoogleGenAI({ apiKey });
-
-      // Fetch user's category instructions for learning
-      const { data: instructions } = await supabase
-        .from('investments_category_instruction')
-        .select(`
-          asset_name,
-          investiments_categories (
-            name
-          )
-        `)
-        .eq('user_id', user.id);
-
-      const instructionsText = instructions && instructions.length > 0 
-        ? `Use estas instruções de categorização personalizadas do usuário (prioridade máxima):
-           ${instructions.map((i: any) => `- Ativo: "${i.asset_name}" -> Categoria: "${i.investiments_categories?.name}"`).join('\n')}`
-        : '';
-
-      const prompt = `
-        ### ROLE
-        Você é o "Wealth Management Architect". Analise este extrato de corretora e extraia os saldos dos ativos.
-
-        ### TAREFA
-        Extraia uma lista de ativos com:
-        1. asset_name: Nome ou ticker do ativo.
-        2. broker: Nome da corretora/instituição.
-        3. asset_type: Categoria (Ações, FIIs, Renda Fixa, Tesouro, Cripto, Outros).
-        4. balance: Saldo monetário atual (número).
-        5. reference_date: O primeiro dia do mês referente ao extrato (formato YYYY-MM-DD).
-
-        ${instructionsText}
-
-        IMPORTANTE: 
-        - Mapeie a categoria de forma inteligente.
-        - Se o ativo for similar a alguma das instruções personalizadas acima, use a categoria indicada na instrução.
-        
-        Retorne APENAS um array JSON válido.
-      `;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [{
-          parts: [
-            { text: prompt },
-            { inlineData: { mimeType: file.type, data: fileData } }
-          ]
-        }],
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                asset_name: { type: Type.STRING },
-                broker: { type: Type.STRING },
-                asset_type: { type: Type.STRING },
-                balance: { type: Type.NUMBER },
-                reference_date: { type: Type.STRING }
-              },
-              required: ["asset_name", "broker", "asset_type", "balance", "reference_date"]
-            }
-          }
-        }
-      });
-
-      const extracted = JSON.parse(response.text || "[]");
       if (extracted.length > 0) {
-        const payloads = extracted.map((item: any) => ({
+        const payloads = extracted.map((item) => ({
           ...item,
           user_id: user.id,
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         }));
-
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('investments')
-          .upsert(payloads, { onConflict: 'user_id,asset_name,broker,reference_date' })
-          .select();
-
+          .upsert(payloads, { onConflict: 'user_id,asset_name,broker,reference_date' });
         if (error) throw error;
-
-        // Feedback logic: check how many were new vs updated
-        // In a real scenario with upsert, we might need to check existing records first to give precise counts,
-        // but for simplicity, we'll report the total processed.
         alert(`${extracted.length} ativos processados (novos ou atualizados) com sucesso!`);
         fetchAvailableMonths();
         fetchInvestments();
       } else {
-        alert("Nenhum dado extraído.");
+        alert('Nenhum dado extraído.');
       }
     } catch (error) {
-      console.error('Erro na importação:', error);
-      alert("Erro ao processar arquivo.");
+      console.error('Erro na importacao de investimentos.');
+      alert(aiErrorMessage(error));
     } finally {
       setIsImporting(false);
       if (e.target) e.target.value = '';
@@ -385,7 +317,7 @@ export default function InvestmentsPage() {
             )}>
               {isImporting ? <Loader2 size={18} className="animate-spin" /> : <Upload size={18} />}
               <span className="text-sm md:text-base">{isImporting ? 'Importando...' : 'Importar'}</span>
-              <input type="file" className="hidden" onChange={handleImportFile} disabled={isImporting} accept="image/*,application/pdf" />
+              <input type="file" className="hidden" onChange={handleImportFile} disabled={isImporting} accept="image/jpeg,image/png,image/webp,application/pdf" />
             </label>
           </div>
 
@@ -498,10 +430,7 @@ export default function InvestmentsPage() {
 
           {/* 4.1 Alpha Advisor após a tabela */}
           {user && !loading && totalCount > 0 && (
-            <InvestmentAdvisor 
-              investments={investments} 
-              userId={user.id} 
-            />
+            <InvestmentAdvisor investmentIds={investments.map((investment) => investment.id)} />
           )}
         </div>
       </main>

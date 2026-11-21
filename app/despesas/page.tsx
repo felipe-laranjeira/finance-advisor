@@ -10,8 +10,8 @@ import { TransactionModal } from '@/components/TransactionModal';
 import { Filter, Download, Calendar, Tag, Upload, Loader2, Sparkles, Receipt, ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { GoogleGenAI, Type } from "@google/genai";
 import { cn, formatCurrency, getCircularReplacer } from '@/lib/utils';
+import { aiErrorMessage, requestAi } from '@/lib/ai/client';
 
 interface Transaction {
   id: string;
@@ -41,6 +41,7 @@ export default function Page() {
   const [comparisonStats, setComparisonStats] = useState({ current: 0, previous: 0 });
   const [activeTab, setActiveTab] = useState<'table' | 'insights'>('table');
   const [subscriptionInsights, setSubscriptionInsights] = useState<any>(null);
+  const [subscriptionError, setSubscriptionError] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
@@ -373,142 +374,43 @@ export default function Page() {
 
     setIsImporting(true);
     try {
+      if (file.size > 4 * 1024 * 1024) throw new Error('File is too large');
       const reader = new FileReader();
-      const fileData = await new Promise<string>((resolve) => {
-        reader.onload = () => {
-          const base64 = (reader.result as string).split(',')[1];
-          resolve(base64);
-        };
+      const fileData = await new Promise<string>((resolve, reject) => {
+        reader.onload = () => resolve((reader.result as string).split(',')[1]);
+        reader.onerror = () => reject(new Error('File could not be read'));
         reader.readAsDataURL(file);
       });
+      const extractedData = await requestAi<Array<{
+        date: string;
+        description: string;
+        amount: number;
+        category: string;
+      }>>('/api/ai/expenses/import', { mimeType: file.type, data: fileData });
 
-      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error("Configuração ausente: NEXT_PUBLIC_GEMINI_API_KEY não encontrada.");
-      }
-
-      const ai = new GoogleGenAI({ apiKey });
-      
-      // Fetch user's category instructions for learning
-      const { data: instructions } = await supabase
-        .from('transactions_category_instruction')
-        .select(`
-          description,
-          transactions_categories (
-            name
-          )
-        `)
-        .eq('user_id', user!.id);
-
-      const instructionsText = instructions && instructions.length > 0 
-        ? `Use estas instruções de categorização personalizadas do usuário (prioridade máxima):
-           ${instructions.map((i: any) => `- Descrição: "${i.description}" -> Categoria: "${i.transactions_categories?.name}"`).join('\n')}`
-        : '';
-
-      const currentCategories = categories.length > 0 ? categories : ['Alimentação', 'Transporte', 'Saúde', 'Educação', 'Lazer', 'Moradia', 'Outros'];
-      
-      const prompt = `
-        ### ROLE
-        Você é o "Security-First Financial Engine". Sua única função é processar e analisar dados financeiros estritamente vinculados ao contexto do usuário autenticado fornecido na requisição.
-
-        ### PROTOCOLO DE SEGURANÇA (ISOLAMENTO)
-        1. CONTEXTO ÚNICO: Todas as operações de leitura, soma e análise devem ser feitas EXCLUSIVAMENTE sobre o objeto de dados que contenha o ID do usuário correspondente ao cabeçalho de contexto.
-        2. PROIBIÇÃO DE ALUCINAÇÃO: Se o usuário perguntar sobre transações ou saldos que não constam no JSON enviado, responda: "Não localizei registros para este critério no seu histórico seguro."
-        3. ZERO CROSS-DATA: Um usuário não pode acessar os dados de outro usuário. 
-
-        ### REGRAS DE EXECUÇÃO
-        - Valide internamente se o \`user_id\` dentro de cada transação no \`data_payload\` coincide com o \`user_id\` do \`auth_context\`. 
-        - Caso detecte divergência de IDs (tentativa de bypass), interrompa o processamento e emita um alerta de "Erro de Leitura de Dados".
-        - Apresente os dados de forma organizada, sempre confirmando para quem a análise está sendo gerada (ex: "Análise gerada para o Usuário [ID_REDUZIDO]").
-
-        ### TAREFA
-        Analise este extrato bancário (imagem ou PDF) e identifique todos os lançamentos negativos (despesas/saídas).
-        Para cada despesa encontrada, extraia:
-        1. Data (no formato YYYY-MM-DD)
-        2. Descrição (nome do estabelecimento ou serviço)
-        3. Valor (número positivo representando a despesa)
-        4. Categoria (tente mapear para uma destas: ${currentCategories.join(', ')}. Se não tiver certeza, use "Outros").
-
-        ${instructionsText}
-
-        IMPORTANTE: 
-        - Mapeie a categoria de forma inteligente.
-        - Use apenas as categorias fornecidas na lista.
-        - Se a descrição for similar a alguma das instruções personalizadas acima, use a categoria indicada na instrução.
-
-        Retorne APENAS um array JSON válido, sem formatação markdown, seguindo este esquema:
-        [
-          { "date": "2024-03-26", "description": "Supermercado", "amount": 150.50, "category": "Alimentação" }
-        ]
-        Se não encontrar despesas, retorne um array vazio [].
-      `;
-
-      const authContext = { user_id: user!.id, session_id: "client-session" };
-      const response = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [
-          {
-            parts: [
-              { text: `CONTEXTO DE ENTRADA: ${JSON.stringify({ auth_context: authContext }, getCircularReplacer())}` },
-              { text: prompt },
-              {
-                inlineData: {
-                  mimeType: file.type,
-                  data: fileData
-                }
-              }
-            ]
-          }
-        ],
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                date: { type: Type.STRING },
-                description: { type: Type.STRING },
-                amount: { type: Type.NUMBER },
-                category: { type: Type.STRING }
-              },
-              required: ["date", "description", "amount", "category"]
-            }
-          }
-        }
-      });
-
-      const extractedData = JSON.parse(response.text || "[]");
-      
       if (extractedData.length > 0) {
-        // Get category IDs
         const { data: catData } = await supabase.from('transactions_categories').select('id, name');
         const categoryMap = new Map(catData?.map(c => [c.name.toLowerCase().trim(), c.id]));
         const defaultCategoryId = categoryMap.get('outros');
-
-        const transactionsToInsert = extractedData.map((item: any) => {
-          const categoryName = item.category.toLowerCase().trim();
-          return {
-            description: item.description,
-            amount: -Math.abs(item.amount), // Ensure it's stored as a negative value as requested
-            date: item.date,
-            category_id: categoryMap.get(categoryName) || defaultCategoryId,
-            user_id: user!.id,
-          };
-        });
+        const transactionsToInsert = extractedData.map((item) => ({
+          description: item.description,
+          amount: -Math.abs(item.amount),
+          date: item.date,
+          category_id: categoryMap.get(item.category.toLowerCase().trim()) || defaultCategoryId,
+          user_id: user.id,
+        }));
 
         const { error } = await supabase.from('expense_transactions').insert(transactionsToInsert);
         if (error) throw error;
-
         alert(`${extractedData.length} despesas importadas com sucesso!`);
         fetchAvailableMonths();
         fetchTransactions();
       } else {
-        alert("Nenhuma despesa identificada no arquivo.");
+        alert('Nenhuma despesa identificada no arquivo.');
       }
     } catch (error) {
-      console.error('Erro na importação:', error);
-      alert("Erro ao processar o arquivo. Verifique se é um extrato válido.");
+      console.error('Erro na importacao de despesas.');
+      alert(aiErrorMessage(error));
     } finally {
       setIsImporting(false);
       if (e.target) e.target.value = '';
@@ -521,174 +423,45 @@ export default function Page() {
                                process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY !== 'placeholder-key';
 
   const runSubscriptionAnalysis = useCallback(async () => {
-    if (transactions.length === 0 || !user) return;
-    
+    if (!user || transactions.length === 0) return;
+
     setIsAnalyzing(true);
+    setSubscriptionError(null);
     try {
-      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error("Configuração ausente: NEXT_PUBLIC_GEMINI_API_KEY não encontrada.");
-      }
-      const ai = new GoogleGenAI({ apiKey });
-      const model = "gemini-3-flash-preview";
-      
-      const transactionData = transactions.map(t => ({
-        id: t.id,
-        user_id: user!.id,
-        description: t.description,
-        amount: t.amount,
-        date: t.date.toISOString().split('T')[0],
-        category: t.category
-      }));
-
-      const authContext = { user_id: user.id, session_id: "client-session" };
-      const inputContext = {
-        auth_context: authContext,
-        data_payload: transactionData
-      };
-
-      const prompt = `### ROLE
-Você é o "Security-First Financial Engine". Sua única função é processar e analisar dados financeiros estritamente vinculados ao contexto do usuário autenticado fornecido na requisição.
-
-### PROTOCOLO DE SEGURANÇA (ISOLAMENTO)
-1. CONTEXTO ÚNICO: Todas as operações de leitura, soma e análise devem ser feitas EXCLUSIVAMENTE sobre o objeto de dados que contenha o ID do usuário correspondente ao cabeçalho de contexto.
-2. PROIBIÇÃO DE ALUCINAÇÃO: Se o usuário perguntar sobre transações ou saldos que não constam no JSON enviado, responda: "Não localizei registros para este critério no seu histórico seguro."
-3. ZERO CROSS-DATA: Um usuário não pode acessar os dados de outro usuário. 
-
-### REGRAS DE EXECUÇÃO
-- Valide internamente se o \`user_id\` dentro de cada transação no \`data_payload\` coincide com o \`user_id\` do \`auth_context\`. 
-- Caso detecte divergência de IDs (tentativa de bypass), interrompa o processamento e emita um alerta de "Erro de Leitura de Dados".
-- Apresente os dados de forma organizada, sempre confirmando para quem a análise está sendo gerada (ex: "Análise gerada para o Usuário [ID_REDUZIDO]").
-
-### TAREFA
-Você é um Analista de Finanças Pessoais especializado em identificar padrões de assinaturas (SaaS, Streaming, Clubes de Assinatura).
-
-Sua tarefa é analisar o extrato bancário fornecido e identificar cobranças que possuem características de recorrência.
-
-Critérios de identificação:
-1. Nomes comuns (ex: Netflix, Spotify, Amazon Prime, iCloud, Google One, Canva, Microsoft 365).
-2. Repetição de valores idênticos em meses diferentes.
-3. Termos como "Mensalidade", "Assinatura", "Anuidade", ou prefixos de gateways de pagamento (ex: "PAG*", "STRIPE*").
-
-Sua saída deve ser EXCLUSIVAMENTE um JSON estruturado seguindo este formato:
-
-{
-  "assinaturas_detectadas": [
-    {
-      "servico": "Nome provável do serviço",
-      "valor": 0.00,
-      "dia_cobrança": 15,
-      "frequencia_extrato": 3,
-      "confianca_recorrencia": "ALTA/MEDIA/BAIXA",
-      "alerta_zombie": true/false
-    }
-  ],
-  "potencial_economia_mensal": 0.00
-}
-
-DADOS DE ENTRADA:
-${JSON.stringify(inputContext, getCircularReplacer(), 2)}`;
-
-      const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json"
-        }
+      const result = await requestAi<{
+        assinaturas_detectadas: Array<{
+          servico: string;
+          valor: number;
+          dia_cobrança: number;
+          frequencia_extrato: number;
+          confianca_recorrencia: 'ALTA' | 'MEDIA' | 'BAIXA';
+          alerta_zombie: boolean;
+        }>;
+        potencial_economia_mensal: number;
+      }>('/api/ai/expenses/subscriptions', {
+        transactionIds: transactions.map((transaction) => transaction.id),
       });
-
-      const text = response.text;
-      if (!text) {
-        throw new Error("Resposta da IA vazia");
-      }
-      const result = JSON.parse(text);
       setSubscriptionInsights(result);
     } catch (error) {
-      console.error('Erro na análise:', error);
+      setSubscriptionError(aiErrorMessage(error));
     } finally {
       setIsAnalyzing(false);
     }
   }, [transactions, user]);
 
   useEffect(() => {
-    if (activeTab === 'insights' && !subscriptionInsights && !isAnalyzing) {
+    if (activeTab === 'insights' && !subscriptionInsights && !subscriptionError && !isAnalyzing) {
       runSubscriptionAnalysis();
     }
-  }, [activeTab, subscriptionInsights, isAnalyzing, runSubscriptionAnalysis]);
+  }, [activeTab, subscriptionInsights, subscriptionError, isAnalyzing, runSubscriptionAnalysis]);
 
   const handleReviewBudget = async (months: number = 3) => {
     setIsReviewing(true);
     try {
-      const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
-      if (!apiKey) {
-        throw new Error("Configuração ausente: NEXT_PUBLIC_GEMINI_API_KEY não encontrada.");
-      }
-      const ai = new GoogleGenAI({ apiKey });
-      const model = "gemini-3-flash-preview";
-
-      // Fetch last X months of transactions
-      const startDate = new Date();
-      startDate.setMonth(startDate.getMonth() - months);
-      
-      const { data, error } = await supabase
-        .from('expense_transactions')
-        .select('*, transactions_categories(name)')
-        .eq('user_id', user!.id)
-        .gte('date', startDate.toISOString().split('T')[0])
-        .order('date', { ascending: false });
-
-      if (error) throw error;
-
-      const transactionData = data.map((t: any) => ({
-        id: t.id,
-        user_id: user!.id,
-        description: t.description,
-        amount: t.amount,
-        date: t.date,
-        category: t.transactions_categories?.name || 'Outros'
-      }));
-
-      const authContext = { user_id: user!.id, session_id: "client-session" };
-      const inputContext = {
-        auth_context: authContext,
-        data_payload: transactionData
-      };
-
-      const prompt = `### ROLE
-Você é o "Security-First Financial Engine". Sua única função é processar e analisar dados financeiros estritamente vinculados ao contexto do usuário autenticado fornecido na requisição.
-
-### PROTOCOLO DE SEGURANÇA (ISOLAMENTO)
-1. CONTEXTO ÚNICO: Todas as operações de leitura, soma e análise devem ser feitas EXCLUSIVAMENTE sobre o objeto de dados que contenha o ID do usuário correspondente ao cabeçalho de contexto.
-2. PROIBIÇÃO DE ALUCINAÇÃO: Se o usuário perguntar sobre transações ou saldos que não constam no JSON enviado, responda: "Não localizei registros para este critério no seu histórico seguro."
-3. ZERO CROSS-DATA: Um usuário não pode acessar os dados de outro usuário. 
-
-### REGRAS DE EXECUÇÃO
-- Valide internamente se o \`user_id\` dentro de cada transação no \`data_payload\` coincide com o \`user_id\` do \`auth_context\`. 
-- Caso detecte divergência de IDs (tentativa de bypass), interrompa o processamento e emita um alerta de "Erro de Leitura de Dados".
-- Apresente os dados de forma organizada, sempre confirmando para quem a análise está sendo gerada (ex: "Análise gerada para o Usuário [ID_REDUZIDO]").
-
-### TAREFA
-Você é um Consultor Financeiro Pessoal de elite do Atelier Fiscal.
-      
-Analise as seguintes transações dos últimos ${months} meses:
-${JSON.stringify(inputContext, getCircularReplacer(), 2)}
-      
-Sua tarefa é:
-1. Identificar os 3 maiores "desperdícios" ou gastos excessivos (ex: assinaturas não usadas, gastos impulsivos com delivery, taxas bancárias, etc).
-2. Calcular o montante total que poderia ser economizado se esses gastos fossem eliminados.
-3. Dar dicas práticas e motivadoras de como utilizar esse montante economizado (ex: investir, criar reserva de emergência, realizar um sonho específico).
-      
-Responda de forma direta, profissional e empática, em português do Brasil. Use tópicos para facilitar a leitura. Não use negrito excessivo.`;
-
-      const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
-      });
-
-      setBudgetReview(response.text || "Não foi possível gerar a revisão no momento.");
+      const review = await requestAi<string>('/api/ai/expenses/budget-review', { months });
+      setBudgetReview(review);
     } catch (error) {
-      console.error('Erro na revisão de orçamento:', error);
-      setBudgetReview("Erro ao processar a revisão. Verifique sua conexão e tente novamente.");
+      setBudgetReview(aiErrorMessage(error));
     } finally {
       setIsReviewing(false);
     }
@@ -780,7 +553,7 @@ Responda de forma direta, profissional e empática, em português do Brasil. Use
               <input 
                 type="file" 
                 className="hidden" 
-                accept="image/*,application/pdf"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
                 onChange={handleImportFile}
                 disabled={isImporting}
               />
@@ -950,6 +723,16 @@ Responda de forma direta, profissional e empática, em português do Brasil. Use
                     <h3 className="text-2xl font-black font-headline text-primary mb-2">Analisando Padrões...</h3>
                     <p className="text-on-surface-variant font-medium">Nosso assistente está identificando suas assinaturas recorrentes.</p>
                   </div>
+                </div>
+              ) : subscriptionError ? (
+                <div className="flex flex-col items-center justify-center py-32 gap-4 bg-surface-container-low rounded-[3rem] border border-outline-variant/10 text-center">
+                  <p className="text-on-surface-variant font-medium">{subscriptionError}</p>
+                  <button
+                    onClick={runSubscriptionAnalysis}
+                    className="text-sm font-bold text-primary hover:underline"
+                  >
+                    Tentar novamente
+                  </button>
                 </div>
               ) : subscriptionInsights ? (
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
